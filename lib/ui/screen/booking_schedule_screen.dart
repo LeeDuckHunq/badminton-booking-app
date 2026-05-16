@@ -2,11 +2,13 @@
 
 import 'package:application/api/phieu_dat_san_api.dart';
 import 'package:application/api/san_api.dart';
+import 'package:application/model/create_phieu_dat_model.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
 import 'package:flutter/material.dart';
 import 'package:application/ui/theme/app_color.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../booking/models/booking_state.dart';
 import '../booking/widgets/booking_date_picker.dart';
@@ -31,6 +33,9 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
   bool _isLoading = true;
   String? _errorMsg;
 
+  // ── User ──────────────────────────────────────────────────────────────────
+  String _maNguoiDung = '';
+
   // ── Date selection ────────────────────────────────────────────────────────
   late DateTime _selectedDate;
 
@@ -46,7 +51,14 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
   void initState() {
     super.initState();
     _selectedDate = _today();
+    _loadUser();
     _loadData();
+  }
+
+  Future<void> _loadUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() => _maNguoiDung = prefs.getString('username') ?? '');
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -227,12 +239,6 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
 
   void _onConfirmBooking() {
     if (_currentSelection == null) return;
-
-    // TODO: Navigate to payment/confirm screen
-    // Navigator.push(context, MaterialPageRoute(
-    //   builder: (_) => BookingConfirmScreen(selection: _currentSelection!),
-    // ));
-
     _showConfirmDialog(_currentSelection!);
   }
 
@@ -240,26 +246,80 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      isScrollControlled: true,   // cho phép sheet cao hơn 50% màn hình
+      isScrollControlled: true,
       builder: (_) => _ConfirmBottomSheet(
         selection: sel,
-        onConfirm: () {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  '🏸 Đặt sân thành công! ${sel.san.tenSan} | ${sel.thoiGianHienThi}'),
-              backgroundColor: AppColor.kCourtGreen,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-          );
-          setState(() => _clearSelection());
-        },
+        onConfirm: () => _submitBooking(sel),
         onCancel: () => Navigator.pop(context),
       ),
     );
+  }
+
+  /// Gửi request tạo phiếu đặt — đứng im tại đây sau khi xong
+  Future<void> _submitBooking(BookingSelection sel) async {
+    // Đóng bottom sheet trước
+    Navigator.pop(context);
+
+    // Hiện loading snackbar
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            SizedBox(
+              width: 16, height: 16,
+              child: CircularProgressIndicator(
+                color: Colors.white, strokeWidth: 2,
+              ),
+            ),
+            SizedBox(width: 12),
+            Text('Đang gửi yêu cầu đặt sân...'),
+          ],
+        ),
+        backgroundColor: AppColor.kCourtGreen,
+        duration: const Duration(seconds: 30), // sẽ bị dismiss thủ công
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+
+    final request = CreatePhieuDatModel(
+      maNguoiDung: _maNguoiDung,
+      maSan: sel.san.maSan,
+      batDau: sel.batDau,
+      ketThuc: sel.ketThuc,
+    );
+
+    final success = await PhieuDatSanApi.createPhieuDat(request);
+
+    if (!mounted) return;
+
+    // Dismiss loading snackbar
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '🏸 Đặt sân thành công! ${sel.san.tenSan} | ${sel.thoiGianHienThi}',
+          ),
+          backgroundColor: AppColor.kCourtGreen,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      // Reset selection + reload lịch để cập nhật slot mới đặt
+      setState(() => _clearSelection());
+      await _reloadBookings();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('❌ Đặt sân thất bại. Vui lòng thử lại!'),
+          backgroundColor: Colors.red[700],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
   }
 
   // ── UI ────────────────────────────────────────────────────────────────────

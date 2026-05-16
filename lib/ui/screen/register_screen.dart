@@ -1,11 +1,15 @@
 import 'package:application/api/account_api.dart';
+import 'package:application/api/san_api.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:application/ui/widget/app_button.dart';
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
 class RegisterScreen extends StatelessWidget {
-  const RegisterScreen({super.key});
+  const RegisterScreen(
+      {
+        super.key,
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -45,9 +49,21 @@ class _BadmintonRegisterScreenState extends State<BadmintonRegisterScreen>
   late AnimationController _pulseCtrl;
   late Animation<double>   _pulseAnim;
 
+  //Amount
+  int amountOfUser = 0;
+  int amountOfCourt = 0;
+
+  Future<void> _loadData() async {
+    amountOfUser = await AccountApi.amountOfAccount();
+    amountOfCourt = await SanApi.amountOfCourt();
+    setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+
+    _loadData();
 
     // Shuttlecock arc: loops
     _shuttleCtrl = AnimationController(
@@ -456,9 +472,9 @@ class _BadmintonRegisterScreenState extends State<BadmintonRegisterScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _statItem('1,240', 'Thành viên'),
+          _statItem('$amountOfUser', 'Thành viên'),
           Container(width: 1, height: 28, color: Colors.green[200]),
-          _statItem('86+', 'Sân đấu'),
+          _statItem('$amountOfCourt+', 'Sân đấu'),
           Container(width: 1, height: 28, color: Colors.green[200]),
           _statItem('24/7', 'Hỗ trợ'),
         ],

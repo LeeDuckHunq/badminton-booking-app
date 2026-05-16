@@ -1,7 +1,7 @@
 import 'package:application/api/account_api.dart';
+import 'package:application/api/san_api.dart';
 import 'package:application/ui/screen/home_screen.dart';
 import 'package:application/ui/screen/register_screen.dart';
-import 'package:application/ui/screen/white_screen.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:application/ui/widget/app_button.dart';
 import 'package:flutter/material.dart';
@@ -45,9 +45,21 @@ class _BadmintonLoginScreenState extends State<BadmintonLoginScreen>
   late AnimationController _pulseCtrl;
   late Animation<double>   _pulseAnim;
 
+  //Amount
+  int amountOfUser = 0;
+  int amountOfCourt = 0;
+
+  Future<void> _loadData() async {
+    amountOfUser = await AccountApi.amountOfAccount();
+    amountOfCourt = await SanApi.amountOfCourt();
+    setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+
+    _loadData();
 
     // Shuttlecock arc: loops
     _shuttleCtrl = AnimationController(
@@ -439,9 +451,9 @@ class _BadmintonLoginScreenState extends State<BadmintonLoginScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _statItem('1,240', 'Thành viên'),
+          _statItem('$amountOfUser', 'Thành viên'),
           Container(width: 1, height: 28, color: Colors.green[200]),
-          _statItem('86+', 'Sân đấu'),
+          _statItem('$amountOfCourt+', 'Sân đấu'),
           Container(width: 1, height: 28, color: Colors.green[200]),
           _statItem('24/7', 'Hỗ trợ'),
         ],

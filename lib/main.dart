@@ -1,4 +1,5 @@
 import 'package:application/api/phieu_dat_san_api.dart';
+import 'package:application/api/qr_api.dart';
 import 'package:application/api/san_api.dart';
 import 'package:application/ui/screen/login_screen.dart';
 import 'package:flutter/material.dart';
@@ -6,8 +7,6 @@ import 'package:flutter/material.dart';
 void main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
-
-  await testApi();
 
   runApp(
     MaterialApp(
@@ -17,36 +16,26 @@ void main() async {
   );
 }
 
-Future<void> testApi() async {
-  try {
+Future<void> testQR() async {
 
-    final dsSan =
-    await SanApi
-        .getSanTheoCumSan(
-        'CS001');
+  final qr = await QRApi.getQR(
+    'leduchung',
+  );
+
+  if (qr != null) {
 
     print(
-      'So san: ${dsSan.length}',
-    );
-
-    final dsPhieu =
-    await PhieuDatSanApi
-        .getPhieuDatTheoNgay(
-      DateTime(
-        2026,
-        5,
-        16,
-      ),
+      'Receiver: ${qr.receiver}',
     );
 
     print(
-      'So phieu: ${dsPhieu.length}',
+      'QR Code: ${qr.qrCode}',
     );
 
-  } catch (e) {
+  } else {
 
     print(
-      'Loi API: $e',
+      'Khong lay duoc QR',
     );
   }
 }

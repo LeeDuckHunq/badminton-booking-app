@@ -67,4 +67,24 @@ class AccountApi {
     }
     return false;
   }
+  
+  static Future<int> amountOfAccount() async {
+    
+    int count = 0;
+    
+    var futureResponse = http.get(
+      Uri.parse("${ServerAddress().address}/user/get-so-luong-user"),
+      headers: ({
+        "Accept": "application/json"
+      })
+    );
+    
+    var response = await futureResponse;
+    
+    if (response.statusCode == 200) {
+      count = int.parse(response.body);
+    }
+    
+    return count;
+  }
 }

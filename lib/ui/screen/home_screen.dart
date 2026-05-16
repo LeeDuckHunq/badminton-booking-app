@@ -5,6 +5,7 @@ import 'package:application/api/hinh_anh_san_api.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/services/distance_service.dart';
 import 'package:application/ui/screen/booking_schedule_screen.dart';
+import 'package:application/ui/screen/search_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:application/ui/theme/app_color.dart';
@@ -13,12 +14,13 @@ import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../home/models/home_model.dart';
 import '../home/widgets/home_header.dart';
 import '../home/widgets/home_search_bar.dart';
 import '../home/widgets/promo_banner.dart';
 import '../home/widgets/venue_card.dart';
 import '../home/widgets/home_bottom_nav.dart';
+import '../home/widgets/filter_bottom_sheet.dart';
+import '../home/models/filter_model.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -37,13 +39,37 @@ class _HomeScreenState extends State<HomeScreen> {
       'https://encrypted-tbn0.gstatic.com/licensed-image?q=tbn:ANd9GcQjVuDVB12oj11fUHVG2fsgMKvglnd7eiANa4oR-6nZCbEZc_lajUm1iFn_Edl_0BwPwiDpfH_QefmCUNmvsPOUu4XlUJlcqg82LWyV3wdisFH-An2HNLLgVZ3sUpTbkyh2KfaPfgm_KCZf&s=19';
   static const _notifCount = 3;
 
-  List<CumSanModel> courtList    = [];
-  Map<String, String> courtImage = {};
+  List<CumSanModel> courtList      = [];
+  Map<String, String> courtImage   = {};
+  // FIX: khai báo ở state thay vì local trong hàm
   Map<String, String> _distanceMap = {};
 
   bool _isLoadingCourts    = true;
-  bool _isLoadingDistances = false;
+  bool _isLoadingDistances = false; // FIX: thêm loading state cho distance
   Position? _userPosition;
+
+  // ── Filter ─────────────────────────────────────────────────────────────────
+  FilterModel _filter = const FilterModel();
+
+  List<CumSanModel> get _filteredList {
+    if (_filter.isEmpty) return courtList;
+    return courtList.where((court) {
+      final openHour  = _parseHour(court.gioMoCua);
+      final closeHour = _parseHour(court.gioDongCua);
+      if (_filter.openBeforeHour != null &&
+          openHour > _filter.openBeforeHour!) return false;
+      if (_filter.closeAfterHour != null) {
+        final threshold =
+        _filter.closeAfterHour == 24 ? 23 : _filter.closeAfterHour!;
+        if (closeHour < threshold) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  int _parseHour(String t) {
+    try { return int.parse(t.split(':')[0]); } catch (_) { return 0; }
+  }
 
   @override
   void initState() {
@@ -88,9 +114,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadDistances() async {
     if (_userPosition == null || courtList.isEmpty) return;
 
-    setState(() => _isLoadingDistances = true);
+    setState(() => _isLoadingDistances = true); // FIX: set loading
 
-    // Gửi 1 request batch cho tất cả sân
     final addresses = courtList.map((c) => c.diaChi).toList();
     final distances = await DistanceService.getDistanceBatch(
       originLat: _userPosition!.latitude,
@@ -100,17 +125,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
 
-    final newMap = <String, String>{};
+    // FIX: lưu vào _distanceMap state thay vì newMap local
     for (int i = 0; i < courtList.length; i++) {
       if (i < distances.length && distances[i] != null) {
-        newMap[courtList[i].maCumSan] = distances[i]!;
+        _distanceMap[courtList[i].maCumSan] = distances[i]!;
       }
     }
 
-    setState(() {
-      _distanceMap        = newMap;
-      _isLoadingDistances = false;
-    });
+    setState(() => _isLoadingDistances = false);
   }
 
   String getTodayLabel() {
@@ -183,59 +205,95 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBody() {
+    final filtered = _filteredList;
+
     return ListView(
       padding: EdgeInsets.zero,
       children: [
         const SizedBox(height: 4),
         PromoBanner(onFilterTap: _onFilterTap),
-        const SizedBox(height: 16),
 
-        // Cảnh báo nếu không lấy được GPS
-        if (!_isLoadingCourts && _userPosition == null)
-          _buildLocationWarning(),
+        // Badge filter đang active
+        if (!_filter.isEmpty) _buildActiveFilterBadge(),
+
+        const SizedBox(height: 16),
 
         if (_isLoadingCourts)
           _buildLoadingList()
-        else if (courtList.isEmpty)
+        else if (filtered.isEmpty)
           _buildEmptyState()
         else
-          ..._buildVenueList(),
+          ..._buildVenueList(filtered),
 
         const SizedBox(height: 16),
       ],
     );
   }
 
-  Widget _buildLocationWarning() {
-    return GestureDetector(
-      onTap: () => Geolocator.openLocationSettings(),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFF8E1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFFFB300).withOpacity(0.5)),
-        ),
-        child: Row(
-          children: const [
-            Icon(Icons.location_off_rounded, color: Color(0xFFFF8F00), size: 20),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Bật định vị để xem khoảng cách thực tế đến sân',
-                style: TextStyle(
-                  color: Color(0xFF6D4C00),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+  /// Thanh nhỏ hiển thị filter đang dùng + nút xoá nhanh
+  Widget _buildActiveFilterBadge() {
+    final parts = <String>[];
+    if (_filter.openBeforeHour != null) {
+      parts.add('Mở trước ${_filter.openBeforeHour}:00');
+    }
+    if (_filter.closeAfterHour != null) {
+      final label = _filter.closeAfterHour == 24
+          ? '23:59'
+          : '${_filter.closeAfterHour}:00';
+      parts.add('Đóng sau $label');
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+      child: Row(
+        children: [
+          const Icon(Icons.filter_alt_rounded,
+              color: AppColor.kCourtGreen, size: 15),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              parts.join(' • '),
+              style: const TextStyle(
+                color: AppColor.kCourtGreen,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            SizedBox(width: 8),
-            Icon(Icons.arrow_forward_ios_rounded,
-                color: Color(0xFFFF8F00), size: 14),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          // Số kết quả
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColor.kMintField,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.green[200]!, width: 1),
+            ),
+            child: Text(
+              '${_filteredList.length} sân',
+              style: const TextStyle(
+                  color: AppColor.kCourtGreen,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Xoá filter nhanh
+          GestureDetector(
+            onTap: () => setState(() => _filter = const FilterModel()),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.red[50],
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(Icons.close_rounded,
+                  color: Colors.red[400], size: 14),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -267,39 +325,70 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildEmptyState() {
+    final hasFilter = !_filter.isEmpty;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48),
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 32),
       child: Column(
         children: [
-          Icon(Icons.sports_tennis_rounded, color: Colors.grey[300], size: 56),
+          Icon(
+            hasFilter
+                ? Icons.filter_alt_off_rounded
+                : Icons.sports_tennis_rounded,
+            color: Colors.grey[300],
+            size: 56,
+          ),
           const SizedBox(height: 12),
-          Text('Không tìm thấy sân nào',
-              style: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500)),
+          Text(
+            hasFilter
+                ? 'Không có sân nào khớp với bộ lọc hiện tại'
+                : 'Không tìm thấy sân nào',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: Colors.grey[400], fontSize: 14, height: 1.5),
+          ),
+          if (hasFilter) ...[
+            const SizedBox(height: 14),
+            GestureDetector(
+              onTap: () => setState(() => _filter = const FilterModel()),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColor.kMintField,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.green[200]!, width: 1),
+                ),
+                child: const Text('Xoá bộ lọc',
+                    style: TextStyle(
+                        color: AppColor.kCourtGreen,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13)),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  List<Widget> _buildVenueList() {
+  // FIX: nhận list đã filter thay vì dùng courtList trực tiếp
+  List<Widget> _buildVenueList(List<CumSanModel> list) {
     final result = <Widget>[];
 
-    for (final court in courtList) {
+    for (final court in list) {
       final distance = _distanceMap[court.maCumSan];
 
       result.add(
         VenueCard(
           court: court,
           courtImage: courtImage[court.maCumSan] ?? '',
-          // null = đang tính, String = đã có
+          // FIX: truyền distance và loading state
           distance: distance,
           isLoadingDistance: _isLoadingDistances && distance == null,
-          onBookTap: () => _onBookTap(court),
+          onBookTap: () => _goToBooking(court),
           onFavoriteTap: _onFavoriteTap,
           onDirectionTap: () => _onDirectionTap(court),
-          onCardTap: () => _onVenueCardTap(court),
+          onCardTap: () => _goToBooking(court),
         ),
       );
       result.add(const SizedBox(height: 14));
@@ -308,15 +397,34 @@ class _HomeScreenState extends State<HomeScreen> {
     return result;
   }
 
+  // ── Callbacks ──────────────────────────────────────────────────────────────
+
   void _onNotificationTap() {}
   void _onAvatarTap() {}
-  void _onSearchTap() {}
   void _onQrTap() {}
   void _onFavoriteTap() {}
-  void _onFilterTap() {}
-  void _onBookTap(CumSanModel court) => _goToBooking(court);
   void _onDirectionTap(CumSanModel court) {}
-  void _onVenueCardTap(CumSanModel court) => _goToBooking(court);
+
+  void _onSearchTap() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SearchScreen(
+          courtList:   courtList,
+          courtImage:  courtImage,
+        ),
+      ),
+    );
+  }
+
+  // FIX: implement _onFilterTap
+  void _onFilterTap() {
+    FilterBottomSheet.show(
+      context: context,
+      currentFilter: _filter,
+      onApply: (newFilter) => setState(() => _filter = newFilter),
+    );
+  }
 
   void _goToBooking(CumSanModel court) {
     Navigator.push(
