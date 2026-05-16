@@ -1,4 +1,5 @@
 import 'package:application/api/account_api.dart';
+import 'package:application/ui/screen/home_screen.dart';
 import 'package:application/ui/screen/register_screen.dart';
 import 'package:application/ui/screen/white_screen.dart';
 import 'package:application/ui/theme/app_color.dart';
@@ -112,7 +113,7 @@ class _BadmintonLoginScreenState extends State<BadmintonLoginScreen>
     if (result) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => WhiteScreen())
+        MaterialPageRoute(builder: (context) => HomeScreen())
       );
     }
   }
@@ -585,7 +586,7 @@ class _CourtPainter extends CustomPainter {
     final double netY = marginV + (ch - 0.04 * ch - marginV) / 2;
     canvas.drawLine(Offset(marginH, netY), Offset(cw - marginH, netY), linePaint);
 
-    // Short service lines
+    // Short services lines
     final double ssTop = marginV + (netY - marginV) * 0.35;
     final double ssBot = netY + (ch - 0.04 * ch - netY) * 0.35;
     canvas.drawLine(Offset(marginH, ssTop), Offset(cw - marginH, ssTop), thinLine);

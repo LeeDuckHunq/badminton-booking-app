@@ -1,3 +1,3 @@
 interface class ServerAddress {
-  String address = "http://192.168.1.82:8080";
+  String address = "https://be-badminton-booking-app-production.up.railway.app";
 }

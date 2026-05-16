@@ -603,7 +603,7 @@ class _CourtPainter extends CustomPainter {
     final double netY = marginV + (ch - 0.04 * ch - marginV) / 2;
     canvas.drawLine(Offset(marginH, netY), Offset(cw - marginH, netY), linePaint);
 
-    // Short service lines
+    // Short services lines
     final double ssTop = marginV + (netY - marginV) * 0.35;
     final double ssBot = netY + (ch - 0.04 * ch - netY) * 0.35;
     canvas.drawLine(Offset(marginH, ssTop), Offset(cw - marginH, ssTop), thinLine);

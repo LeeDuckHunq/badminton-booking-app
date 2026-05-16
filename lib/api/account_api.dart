@@ -26,8 +26,10 @@ class AccountApi {
         final prefs = await SharedPreferences.getInstance();
 
         await prefs.setString("jwt_token", response.body);
+        await prefs.setString("username", username);
 
         print(prefs.getString("jwt_token"));
+        print(prefs.getString("username"));
 
       } catch (e) {
 
