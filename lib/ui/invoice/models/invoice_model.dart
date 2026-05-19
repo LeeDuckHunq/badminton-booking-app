@@ -17,6 +17,7 @@ class InvoiceUserInfo {
 
 /// Thông tin đặt sân
 class InvoiceBookingInfo {
+  final String maPhieuDat;
   final String tenCumSan;
   final String tenSan;
   final String diaChi;
@@ -25,6 +26,7 @@ class InvoiceBookingInfo {
   final double tongTien;
 
   const InvoiceBookingInfo({
+    required this.maPhieuDat,
     required this.tenCumSan,
     required this.tenSan,
     required this.diaChi,

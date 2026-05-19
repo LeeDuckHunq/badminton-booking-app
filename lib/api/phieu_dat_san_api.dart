@@ -40,51 +40,24 @@ class PhieuDatSanApi {
     );
   }
 
-  static Future<bool>
-  createPhieuDat(
-      CreatePhieuDatModel request
-      ) async {
+  // lib/api/phieu_dat_san_api.dart
 
+  static Future<String?> createPhieuDat(CreatePhieuDatModel request) async {
     try {
-
-      final response =
-      await http.post(
-
-        Uri.parse(
-          '${ServerAddress().address}/phieu-dat-san/create',
-        ),
-
-        headers: {
-          'Content-Type':
-          'application/json',
-        },
-
-        body: jsonEncode(
-          request.toJson(),
-        ),
+      final response = await http.post(
+        Uri.parse('${ServerAddress().address}/phieu-dat-san/create'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(request.toJson()),
       );
 
-      print(
-        'Status: '
-            '${response.statusCode}',
-      );
-
-      print(
-        'Response: '
-            '${response.body}',
-      );
-
-      return response
-          .statusCode == 200;
-
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return data['maPhieuDat'] as String?; // BE trả về maPhieuDat
+      }
+      return null;
     } catch (e) {
-
-      print(
-        'Loi create phieu: '
-            '$e',
-      );
-
-      return false;
+      print('createPhieuDat error: $e');
+      return null;
     }
   }
 }

@@ -251,22 +251,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
       isScrollControlled: true,
       builder: (_) => _ConfirmBottomSheet(
         selection: sel,
-        onConfirm: () {
-          _submitBooking(sel);
-          Navigator.push(context, MaterialPageRoute(
-            builder: (_) => InvoiceScreen(
-              booking: InvoiceBookingInfo(
-                tenCumSan: widget.cumSan.tenCumSan,
-                tenSan:    sel.san.tenSan,
-                diaChi:    widget.cumSan.diaChi,
-                batDau:    sel.batDau,
-                ketThuc:   sel.ketThuc,
-                tongTien:  sel.tongTien,
-              ),
-              maNguoiDung: _maNguoiDung,
-            ),
-          ));
-        },
+        onConfirm: () => _submitBooking(sel), // chỉ gọi submit, navigate bên trong
         onCancel: () => Navigator.pop(context),
       ),
     );
@@ -274,31 +259,30 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
 
   /// Gửi request tạo phiếu đặt — đứng im tại đây sau khi xong
   Future<void> _submitBooking(BookingSelection sel) async {
-    // Đóng bottom sheet trước
+    // 1. Đóng bottom sheet
     Navigator.pop(context);
 
-    // Hiện loading snackbar
+    // 2. Hiện loading snackbar
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Row(
           children: [
             SizedBox(
               width: 16, height: 16,
-              child: CircularProgressIndicator(
-                color: Colors.white, strokeWidth: 2,
-              ),
+              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
             ),
             SizedBox(width: 12),
             Text('Đang gửi yêu cầu đặt sân...'),
           ],
         ),
         backgroundColor: AppColor.kCourtGreen,
-        duration: const Duration(seconds: 30), // sẽ bị dismiss thủ công
+        duration: const Duration(seconds: 30),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
 
+    // 3. Gọi API — nhận về maPhieuDat
     final request = CreatePhieuDatModel(
       maNguoiDung: _maNguoiDung,
       maSan: sel.san.maSan,
@@ -306,29 +290,13 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
       ketThuc: sel.ketThuc,
     );
 
-    final success = await PhieuDatSanApi.createPhieuDat(request);
+    final maPhieuDat = await PhieuDatSanApi.createPhieuDat(request);
 
     if (!mounted) return;
-
-    // Dismiss loading snackbar
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-    /*
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Giữ sân thành công! ${sel.san.tenSan} | ${sel.thoiGianHienThi}',
-          ),
-          backgroundColor: AppColor.kCourtGreen,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-      // Reset selection + reload lịch để cập nhật slot mới đặt
-      setState(() => _clearSelection());
-      await _reloadBookings();
-    } else {
+    // 4. Xử lý kết quả
+    if (maPhieuDat == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('❌ Đặt sân thất bại. Vui lòng thử lại!'),
@@ -337,8 +305,31 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
+      return;
     }
-     */
+
+    // 5. Navigate sang InvoiceScreen với đầy đủ dữ liệu
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => InvoiceScreen(
+          booking: InvoiceBookingInfo(
+            maPhieuDat: maPhieuDat,         // ← từ API
+            tenCumSan: widget.cumSan.tenCumSan,
+            tenSan: sel.san.tenSan,
+            diaChi: widget.cumSan.diaChi,
+            batDau: sel.batDau,
+            ketThuc: sel.ketThuc,
+            tongTien: sel.tongTien,
+          ),
+          maPhieuDat: maPhieuDat,
+        ),
+      ),
+    );
+
+    // 6. Reload lịch sân sau khi navigate
+    setState(() => _clearSelection());
+    await _reloadBookings();
   }
 
   // ── UI ────────────────────────────────────────────────────────────────────

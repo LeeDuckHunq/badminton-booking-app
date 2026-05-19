@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:application/api/account_api.dart';
+import 'package:application/api/hoa_don_api.dart';
 import 'package:application/api/khuyen_mai_api.dart';
+import 'package:application/model/hoa_don_request_model.dart';
 import 'package:application/model/khuyen_mai_model.dart';
 import 'package:application/model/user_model.dart';
 import 'package:application/ui/theme/app_color.dart';
@@ -16,13 +18,12 @@ class InvoiceScreen extends StatefulWidget {
   /// Thông tin đặt sân — truyền từ BookingScheduleScreen
   final InvoiceBookingInfo booking;
 
-  /// maNguoiDung để upload ảnh + gọi API confirm
-  final String maNguoiDung;
+  final String maPhieuDat;
 
   const InvoiceScreen({
     super.key,
     required this.booking,
-    required this.maNguoiDung,
+    required this.maPhieuDat
   });
 
   @override
@@ -46,7 +47,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   // ── Bill upload ───────────────────────────────────────────────────────────
   File? _billFile;
-  // _billLocalPath đã bỏ — dùng _billFile trực tiếp
   String? _billUploadedUrl;
   bool _isUploading = false;
 
@@ -281,12 +281,10 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     if (_billUploadedUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text(
-              '⚠️ Vui lòng tải lên bill thanh toán trước khi xác nhận'),
+          content: const Text('⚠️ Vui lòng tải lên bill thanh toán trước khi xác nhận'),
           backgroundColor: Colors.orange[700],
           behavior: SnackBarBehavior.floating,
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
       return;
@@ -294,29 +292,44 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
     setState(() => _isConfirming = true);
 
-    // TODO: Gọi API xác nhận đặt sân với:
-    // - maNguoiDung: widget.maNguoiDung
-    // - maKhuyenMai: _selectedMaKhuyenMai
-    // - billUrl: _billUploadedUrl
-    // - tongTienSauGiam: _tongTienSauGiam
+    final now = DateTime.now();
+    final ngayLap = '${now.year}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')}'
+        'T${now.hour.toString().padLeft(2,'0')}:${now.minute.toString().padLeft(2,'0')}:${now.second.toString().padLeft(2,'0')}';
 
-    await Future.delayed(const Duration(seconds: 1)); // TODO: thay bằng API
+    final request = CreateHoaDonRequest(
+      maHoaDon: 'HD${now.millisecondsSinceEpoch}',  // auto generate
+      maPhieuDat: widget.maPhieuDat,
+      maKhuyenMai: _selectedMaKhuyenMai,
+      tongTien: _tongTienSauGiam,
+      ngayLap: ngayLap,
+      billThanhToan: _billUploadedUrl!,
+    );
+
+    final success = await HoaDonApi.createHoaDon(request);
 
     if (!mounted) return;
     setState(() => _isConfirming = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('🏸 Đặt sân thành công! Chúng tôi sẽ xác nhận sớm.'),
-        backgroundColor: AppColor.kCourtGreen,
-        behavior: SnackBarBehavior.floating,
-        shape:
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-
-    // TODO: Navigate về Home hoặc màn lịch đặt sân của user
-    // Navigator.popUntil(context, (r) => r.isFirst);
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('🏸 Đặt sân thành công! Chúng tôi sẽ xác nhận sớm.'),
+          backgroundColor: AppColor.kCourtGreen,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      Navigator.popUntil(context, (r) => r.isFirst);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('❌ Tạo hóa đơn thất bại. Vui lòng thử lại!'),
+          backgroundColor: Colors.red[700],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
