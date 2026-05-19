@@ -1,5 +1,3 @@
-// lib/ui/booking/widgets/booking_summary_bar.dart
-
 import 'package:flutter/material.dart';
 import 'package:application/ui/theme/app_color.dart';
 import '../models/booking_state.dart';

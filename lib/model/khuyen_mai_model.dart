@@ -4,7 +4,6 @@ class KhuyenMaiModel {
   final double phanTramGiam;
   final DateTime ngayBatDau;
   final DateTime ngayKetThuc;
-  final bool trangThai;
 
   KhuyenMaiModel({
     required this.maKhuyenMai,
@@ -12,7 +11,6 @@ class KhuyenMaiModel {
     required this.phanTramGiam,
     required this.ngayBatDau,
     required this.ngayKetThuc,
-    required this.trangThai,
   });
 
   factory KhuyenMaiModel.fromJson(
@@ -26,8 +24,7 @@ class KhuyenMaiModel {
       ngayBatDau:
       DateTime.parse(json['ngayBatDau']),
       ngayKetThuc:
-      DateTime.parse(json['ngayKetThuc']),
-      trangThai: json['trangThai'],
+      DateTime.parse(json['ngayKetThuc'])
     );
   }
 
@@ -39,8 +36,7 @@ class KhuyenMaiModel {
       'ngayBatDau':
       ngayBatDau.toIso8601String(),
       'ngayKetThuc':
-      ngayKetThuc.toIso8601String(),
-      'trangThai': trangThai,
+      ngayKetThuc.toIso8601String()
     };
   }
 }

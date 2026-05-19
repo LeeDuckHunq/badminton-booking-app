@@ -3,10 +3,16 @@ import 'package:application/api/qr_api.dart';
 import 'package:application/api/san_api.dart';
 import 'package:application/ui/screen/login_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'https://amkurnemhawgartdzhwx.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFta3VybmVtaGF3Z2FydGR6aHd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5Mzc0NzgsImV4cCI6MjA5NDUxMzQ3OH0.ZaDoOxVC1Hy2Id2JvDpmnFgFBdoC2wRm9IalESJuJAU',
+  );
 
   runApp(
     MaterialApp(

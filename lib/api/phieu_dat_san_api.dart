@@ -75,8 +75,7 @@ class PhieuDatSanApi {
       );
 
       return response
-          .statusCode ==
-          200;
+          .statusCode == 200;
 
     } catch (e) {
 

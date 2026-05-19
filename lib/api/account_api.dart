@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:application/model/user_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:application/api/server_address.dart';
 import 'package:http/http.dart' as http;
@@ -86,5 +87,20 @@ class AccountApi {
     }
     
     return count;
+  }
+
+  static Future<UserModel> getUser(String username) async {
+    final response = await http.get(
+      Uri.parse(
+        '${ServerAddress().address}/user/get-user-info/$username',
+      ),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return UserModel.fromJson(data);
+    } else {
+      throw Exception('Không lấy được thông tin user');
+    }
   }
 }

@@ -6,6 +6,8 @@ import 'package:application/model/create_phieu_dat_model.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
+import 'package:application/ui/screen/invoice_screen.dart';
+import 'package:application/ui/invoice/models/invoice_model.dart';
 import 'package:flutter/material.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -249,7 +251,22 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
       isScrollControlled: true,
       builder: (_) => _ConfirmBottomSheet(
         selection: sel,
-        onConfirm: () => _submitBooking(sel),
+        onConfirm: () {
+          _submitBooking(sel);
+          Navigator.push(context, MaterialPageRoute(
+            builder: (_) => InvoiceScreen(
+              booking: InvoiceBookingInfo(
+                tenCumSan: widget.cumSan.tenCumSan,
+                tenSan:    sel.san.tenSan,
+                diaChi:    widget.cumSan.diaChi,
+                batDau:    sel.batDau,
+                ketThuc:   sel.ketThuc,
+                tongTien:  sel.tongTien,
+              ),
+              maNguoiDung: _maNguoiDung,
+            ),
+          ));
+        },
         onCancel: () => Navigator.pop(context),
       ),
     );
@@ -296,11 +313,12 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     // Dismiss loading snackbar
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
+    /*
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '🏸 Đặt sân thành công! ${sel.san.tenSan} | ${sel.thoiGianHienThi}',
+            'Giữ sân thành công! ${sel.san.tenSan} | ${sel.thoiGianHienThi}',
           ),
           backgroundColor: AppColor.kCourtGreen,
           behavior: SnackBarBehavior.floating,
@@ -320,6 +338,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         ),
       );
     }
+     */
   }
 
   // ── UI ────────────────────────────────────────────────────────────────────
