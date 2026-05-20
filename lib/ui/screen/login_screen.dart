@@ -368,12 +368,16 @@ class _BadmintonLoginScreenState extends State<BadmintonLoginScreen>
               Text('Chưa có tài khoản? ',
                   style: TextStyle(color: Colors.grey[500], fontSize: 13.5)),
               GestureDetector(
-                onTap: () {
-                  Navigator.push(
+                onTap: () async {
+                  final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
                         builder: (context) => RegisterScreen())
                   );
+
+                  if (result == true) {
+                    await _loadData();
+                  }
                 },
                 child: const Text(
                   'Đăng ký ngay',

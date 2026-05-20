@@ -29,4 +29,19 @@ class CumSanApi {
       return null;
     }
   }
+
+  static Future<CumSanModel?> getCumSanInfo(String maCumSan) async {
+    final response = await http.get(
+        Uri.parse('${ServerAddress().address}/cumsan/cum-san-info/${maCumSan}'),
+        headers: ({'Accept': 'application/json'})
+    );
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> json = jsonDecode(response.body);
+
+      return CumSanModel.fromJson(json);
+    }
+
+    return null;
+  }
 }

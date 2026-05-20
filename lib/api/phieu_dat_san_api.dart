@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:application/api/server_address.dart';
 import 'package:application/model/create_phieu_dat_model.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../model/phieu_dat_san_model.dart';
 
 class PhieuDatSanApi {
@@ -59,5 +60,24 @@ class PhieuDatSanApi {
       print('createPhieuDat error: $e');
       return null;
     }
+  }
+
+  static Future<List<PhieuDatSanModel>> getPhieuDatSanTheoUser(String username) async {
+
+    var response = await http.get(
+      Uri.parse('${ServerAddress().address}/phieu-dat-san/get-theo-user/$username'),
+      headers: ({
+        "Accept": "application/json"
+      })
+    );
+
+    if (response.statusCode == 200) {
+
+      final List<dynamic> data = jsonDecode(response.body);
+
+      return data.map((e) => PhieuDatSanModel.fromJson(e)).toList();
+    }
+
+    throw Exception('Không lấy được lịch đặt sân');
   }
 }

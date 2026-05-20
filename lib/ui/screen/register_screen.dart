@@ -1,5 +1,6 @@
 import 'package:application/api/account_api.dart';
 import 'package:application/api/san_api.dart';
+import 'package:application/ui/screen/login_screen.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:application/ui/widget/app_button.dart';
 import 'package:flutter/material.dart';
@@ -113,28 +114,56 @@ class _BadmintonRegisterScreenState extends State<BadmintonRegisterScreen>
 
   Future<void> _register() async {
 
+    // kiểm tra rỗng
+    if (_userName.text.trim().isEmpty ||
+        _passwordCtrl.text.trim().isEmpty ||
+        _fullNameCtrl.text.trim().isEmpty ||
+        _emailCtrl.text.trim().isEmpty ||
+        _phoneNumber.text.trim().isEmpty) {
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Vui lòng nhập đầy đủ thông tin.',
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+
+      return;
+    }
+
     var result = await AccountApi.register(
-        _userName.text,
-        _passwordCtrl.text,
-        _roleCtrl.text,
-        _fullNameCtrl.text,
-        _emailCtrl.text,
-        _phoneNumber.text
+      _userName.text.trim(),
+      _passwordCtrl.text.trim(),
+      _roleCtrl.text.trim(),
+      _fullNameCtrl.text.trim(),
+      _emailCtrl.text.trim(),
+      _phoneNumber.text.trim(),
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-            result ? 'Đăng ký thành công, đăng nhập thôi!' : "Đăng ký không thành công."
+          result
+              ? 'Đăng ký thành công, đăng nhập thôi!'
+              : 'Đăng ký không thành công.',
         ),
-        backgroundColor: result ? AppColor.kCourtGreen : AppColor.kAccentYellow,
+        backgroundColor:
+        result ? AppColor.kCourtGreen : AppColor.kAccentYellow,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
       ),
     );
 
     if (result) {
-      Navigator.pop(context);
+      Navigator.pop(context, true);
     }
   }
 
@@ -392,7 +421,7 @@ class _BadmintonRegisterScreenState extends State<BadmintonRegisterScreen>
                   style: TextStyle(color: Colors.grey[500], fontSize: 13.5)),
               GestureDetector(
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(context, true);
                 },
                 child: const Text(
                   'Đăng nhập ngay',

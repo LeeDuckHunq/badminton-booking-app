@@ -8,20 +8,9 @@ import 'package:http/http.dart' as http;
 class KhuyenMaiApi {
 
   static Future<List<KhuyenMaiModel>>
-  getKhuyenMaiTheoUser() async {
+  getKhuyenMaiTheoUser(String username) async {
 
     try {
-      final prefs =
-      await SharedPreferences.getInstance();
-
-      String? username =
-      prefs.getString("username");
-
-      if (username == null) {
-        throw Exception(
-            "Không tìm thấy username");
-      }
-
       final response = await http.get(
         Uri.parse(
           "${ServerAddress().address}"

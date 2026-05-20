@@ -48,4 +48,25 @@ class SanApi {
 
     return count;
   }
+
+  static Future<SanModel?> getSanInfo(String maSan) async {
+
+    var futureResponse = http.get(
+        Uri.parse("${ServerAddress().address}/san/san-info/$maSan"),
+        headers: ({
+          "Accept": "application/json"
+        })
+    );
+
+    var response = await futureResponse;
+    
+    if (response.statusCode == 200) {
+      
+      Map<String, dynamic> json = jsonDecode(response.body);
+      
+      return SanModel.fromJson(json);
+    }
+    
+    return null;
+  }
 }

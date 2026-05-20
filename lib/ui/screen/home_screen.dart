@@ -4,6 +4,7 @@ import 'package:application/api/cum_san_api.dart';
 import 'package:application/api/hinh_anh_san_api.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/services/distance_service.dart';
+import 'package:application/ui/screen/account_screen.dart';
 import 'package:application/ui/screen/booking_schedule_screen.dart';
 import 'package:application/ui/screen/search_screen.dart';
 import 'package:flutter/material.dart';
@@ -145,19 +146,51 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle.light,
+    );
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F4),
-      body: Column(
+
+      body: IndexedStack(
+        index: _currentTab.index,
         children: [
-          _buildGreenHeader(),
-          Expanded(child: _buildBody()),
-          HomeBottomNav(
-            currentTab: _currentTab,
-            onTabChanged: (tab) => setState(() => _currentTab = tab),
+          // HOME TAB
+          Column(
+            children: [
+              _buildGreenHeader(),
+              Expanded(child: _buildBody()),
+            ],
           ),
+
+          // MAP TAB
+          const Center(
+            child: Text('Map Screen'),
+          ),
+
+          // EXPLORE TAB
+          const Center(
+            child: Text('Explore Screen'),
+          ),
+
+          // HIGHLIGHT TAB
+          const Center(
+            child: Text('Highlight Screen'),
+          ),
+
+          // ACCOUNT TAB
+          const AccountScreen(),
         ],
+      ),
+
+      bottomNavigationBar: HomeBottomNav(
+        currentTab: _currentTab,
+        onTabChanged: (tab) {
+          setState(() {
+            _currentTab = tab;
+          });
+        },
       ),
     );
   }

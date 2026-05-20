@@ -102,7 +102,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       // ── Load khuyến mãi từ API ───────────
       List<KhuyenMaiModel> promoList =
       await KhuyenMaiApi
-          .getKhuyenMaiTheoUser();
+          .getKhuyenMaiTheoUser(username);
 
       print("PROMO COUNT: ${promoList.length}");
 
