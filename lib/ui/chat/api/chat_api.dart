@@ -63,22 +63,41 @@ class ChatApi {
   }
 
   /// Lấy tin nhắn của phòng
-  static Future<List<ChatMessage>> getMessages(String maPhongChat) async {
+  static Future<List<ChatMessage>> getMessages(
+      String maPhongChat) async {
     try {
       final res = await http.get(
         Uri.parse('$_base/chat/messages/$maPhongChat'),
         headers: {'Accept': 'application/json'},
       );
+
       if (res.statusCode == 200) {
+        print(res.body);
+
         final List<dynamic> data = jsonDecode(res.body);
-        final msgs = data.map((e) => ChatMessage.fromJson(e)).toList();
-        msgs.sort((a, b) => a.thoiGianGui.compareTo(b.thoiGianGui));
+
+        final msgs = data.map((e) {
+          print('RAW TIME: ${e['thoiGianGui']}');
+
+          final msg = ChatMessage.fromJson(e);
+
+          print('PARSED TIME: ${msg.thoiGianGui}');
+
+          return msg;
+        }).toList();
+
+        msgs.sort(
+              (a, b) => a.thoiGianGui.compareTo(b.thoiGianGui),
+        );
+
         return msgs;
       }
-    } catch (_) {}
+    } catch (e) {
+      print(e);
+    }
+
     return [];
   }
-
   /// Gửi tin nhắn
   static Future<bool> sendMessage({
     required String maPhongChat,

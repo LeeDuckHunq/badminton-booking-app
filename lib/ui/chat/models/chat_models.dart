@@ -34,12 +34,24 @@ class ChatMessage {
     required this.thoiGianGui,
   });
 
-  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
-    maTinNhan: json['maTinNhan'] as String? ?? '',
-    maPhongChat: json['maPhongChat'] as String? ?? '',
-    usernameNguoiGui: json['usernameNguoiGui'] as String? ?? '',
-    noiDung: json['noiDung'] as String? ?? '',
-    thoiGianGui: DateTime.tryParse(json['thoiGianGui'] as String? ?? '') ??
-        DateTime.now(),
-  );
+  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    DateTime parsedTime;
+
+    try {
+      parsedTime = DateTime.parse(
+        '${json['thoiGianGui']}Z',
+      ).toLocal();
+    } catch (_) {
+      parsedTime = DateTime.now();
+    }
+
+    return ChatMessage(
+      maTinNhan: json['maTinNhan']?.toString() ?? '',
+      maPhongChat: json['maPhongChat']?.toString() ?? '',
+      usernameNguoiGui:
+      json['usernameNguoiGui']?.toString() ?? '',
+      noiDung: json['noiDung']?.toString() ?? '',
+      thoiGianGui: parsedTime,
+    );
+  }
 }
