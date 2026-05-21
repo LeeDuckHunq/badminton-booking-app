@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:application/ui/theme/app_color.dart';
 
-enum HomeNavTab { home, map, explore, highlight, account }
+enum HomeNavTab { home, chat, explore, highlight, account }
 
 class HomeBottomNav extends StatelessWidget {
   final HomeNavTab currentTab;
@@ -17,7 +17,7 @@ class HomeBottomNav extends StatelessWidget {
 
   static const _tabs = [
     _NavItem(tab: HomeNavTab.home,      icon: Icons.home_rounded,        label: 'Trang chủ'),
-    _NavItem(tab: HomeNavTab.map,       icon: Icons.place_outlined,      label: 'Bản đồ'),
+    _NavItem(tab: HomeNavTab.chat,      icon: Icons.chat_bubble_outline_rounded,     label: 'Tin nhắn'),
     _NavItem(tab: HomeNavTab.explore,   icon: Icons.article_outlined,    label: 'Khám phá',  isCentral: true),
     _NavItem(tab: HomeNavTab.highlight, icon: Icons.local_fire_department_outlined, label: 'Nổi bật'),
     _NavItem(tab: HomeNavTab.account,   icon: Icons.person_outline_rounded, label: 'Tài khoản'),

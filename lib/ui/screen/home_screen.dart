@@ -5,6 +5,7 @@ import 'package:application/api/hinh_anh_san_api.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/services/distance_service.dart';
 import 'package:application/ui/screen/ClaimVoucherScreen.dart';
+import 'package:application/ui/screen/chat_screen.dart';
 import 'package:application/ui/screen/highlight_screen.dart';
 import 'package:application/ui/screen/account_screen.dart';
 import 'package:application/ui/screen/booking_schedule_screen.dart';
@@ -44,11 +45,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<CumSanModel> courtList      = [];
   Map<String, String> courtImage   = {};
-  // FIX: khai báo ở state thay vì local trong hàm
   Map<String, String> _distanceMap = {};
 
   bool _isLoadingCourts    = true;
-  bool _isLoadingDistances = false; // FIX: thêm loading state cho distance
+  bool _isLoadingDistances = false;
   Position? _userPosition;
 
   // ── Filter ─────────────────────────────────────────────────────────────────
@@ -167,9 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           // MAP TAB
-          const Center(
-            child: Text('Map Screen'),
-          ),
+          const ChatScreen(),
 
           // EXPLORE TAB
           const ClaimVoucherScreen(),
