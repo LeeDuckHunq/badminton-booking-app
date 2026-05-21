@@ -1,6 +1,7 @@
 class KhuyenMaiModel {
   final String maKhuyenMai;
   final String tenKhuyenMai;
+  final String duongDanAnh;
   final double phanTramGiam;
   final DateTime ngayBatDau;
   final DateTime ngayKetThuc;
@@ -8,6 +9,7 @@ class KhuyenMaiModel {
   KhuyenMaiModel({
     required this.maKhuyenMai,
     required this.tenKhuyenMai,
+    required this.duongDanAnh,
     required this.phanTramGiam,
     required this.ngayBatDau,
     required this.ngayKetThuc,
@@ -16,15 +18,27 @@ class KhuyenMaiModel {
   factory KhuyenMaiModel.fromJson(
       Map<String, dynamic> json) {
     return KhuyenMaiModel(
-      maKhuyenMai: json['maKhuyenMai'],
-      tenKhuyenMai: json['tenKhuyenMai'],
+      maKhuyenMai:
+      json['maKhuyenMai'] ?? '',
+
+      tenKhuyenMai:
+      json['tenKhuyenMai'] ?? '',
+
+      duongDanAnh:
+      json['duongDanAnh'] ?? '',
+
       phanTramGiam:
-      (json['phanTramGiam'] as num)
-          .toDouble(),
-      ngayBatDau:
-      DateTime.parse(json['ngayBatDau']),
-      ngayKetThuc:
-      DateTime.parse(json['ngayKetThuc'])
+      (json['phanTramGiam'] as num?)
+          ?.toDouble() ??
+          0.0,
+
+      ngayBatDau: DateTime.parse(
+        json['ngayBatDau'],
+      ),
+
+      ngayKetThuc: DateTime.parse(
+        json['ngayKetThuc'],
+      ),
     );
   }
 
@@ -32,11 +46,42 @@ class KhuyenMaiModel {
     return {
       'maKhuyenMai': maKhuyenMai,
       'tenKhuyenMai': tenKhuyenMai,
+      'duongDanAnh': duongDanAnh,
       'phanTramGiam': phanTramGiam,
       'ngayBatDau':
       ngayBatDau.toIso8601String(),
       'ngayKetThuc':
-      ngayKetThuc.toIso8601String()
+      ngayKetThuc.toIso8601String(),
     };
+  }
+
+  KhuyenMaiModel copyWith({
+    String? maKhuyenMai,
+    String? tenKhuyenMai,
+    String? duongDanAnh,
+    double? phanTramGiam,
+    DateTime? ngayBatDau,
+    DateTime? ngayKetThuc,
+  }) {
+    return KhuyenMaiModel(
+      maKhuyenMai:
+      maKhuyenMai ??
+          this.maKhuyenMai,
+      tenKhuyenMai:
+      tenKhuyenMai ??
+          this.tenKhuyenMai,
+      duongDanAnh:
+      duongDanAnh ??
+          this.duongDanAnh,
+      phanTramGiam:
+      phanTramGiam ??
+          this.phanTramGiam,
+      ngayBatDau:
+      ngayBatDau ??
+          this.ngayBatDau,
+      ngayKetThuc:
+      ngayKetThuc ??
+          this.ngayKetThuc,
+    );
   }
 }

@@ -4,6 +4,8 @@ import 'package:application/api/cum_san_api.dart';
 import 'package:application/api/hinh_anh_san_api.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/services/distance_service.dart';
+import 'package:application/ui/screen/ClaimVoucherScreen.dart';
+import 'package:application/ui/screen/highlight_screen.dart';
 import 'package:application/ui/screen/account_screen.dart';
 import 'package:application/ui/screen/booking_schedule_screen.dart';
 import 'package:application/ui/screen/search_screen.dart';
@@ -170,14 +172,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
 
           // EXPLORE TAB
-          const Center(
-            child: Text('Explore Screen'),
-          ),
+          const ClaimVoucherScreen(),
 
           // HIGHLIGHT TAB
-          const Center(
-            child: Text('Highlight Screen'),
-          ),
+          const HighlightScreen(),
 
           // ACCOUNT TAB
           const AccountScreen(),

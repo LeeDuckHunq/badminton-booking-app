@@ -110,78 +110,90 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     return Container(
       color: const Color(0xFFF4F6F4),
-      child: _isLoading
-          ? const Center(
-          child: CircularProgressIndicator(
-              color: AppColor.kCourtGreen, strokeWidth: 2.5))
-          : CustomScrollView(
-        slivers: [
-          _buildSliverHeader(),
-          SliverToBoxAdapter(
-            child: Column(
-              children: [
-                const SizedBox(height: 16),
-                _buildUserCard(),
-                const SizedBox(height: 16),
-                _buildStatsRow(),
-                const SizedBox(height: 20),
-                _buildMenuSection('Hoạt động', [
-                  _MenuItem(
-                    icon: Icons.sports_tennis_rounded,
-                    label: 'Sân đã đặt',
-                    badge: _phieuList.length.toString(),
+      child: RefreshIndicator(
+        color: AppColor.kCourtGreen,
+        onRefresh: _loadData,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            _buildSliverHeader(),
+            if (_isLoading)
+              const SliverFillRemaining(
+                child: Center(
+                  child: CircularProgressIndicator(
                     color: AppColor.kCourtGreen,
-                    onTap: () => _push(BookingHistoryScreen(
-                      phieuList:  _phieuList,
-                      sanList:    _sanList,
-                      cumSanList: _cumSanList,
-                    )),
+                    strokeWidth: 2.5,
                   ),
-                  _MenuItem(
-                    icon: Icons.local_offer_rounded,
-                    label: 'Voucher của tôi',
-                    badge: _voucherList
-                        .where((v) => v.ngayKetThuc.isAfter(DateTime.now()))
-                        .length
-                        .toString(),
-                    color: Colors.orange[700]!,
-                    onTap: () => _push(
-                        VoucherScreen(voucherList: _voucherList)),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                _buildMenuSection('Thông tin', [
-                  _MenuItem(
-                    icon: Icons.policy_outlined,
-                    label: 'Chính sách & Bảo mật',
-                    color: Colors.indigo,
-                    onTap: () => _push(const PolicyScreen()),
-                  ),
-                  _MenuItem(
-                    icon: Icons.info_outline_rounded,
-                    label: 'Phiên bản ứng dụng',
-                    color: Colors.blueGrey,
-                    trailing: _versionBadge(),
-                    onTap: () => _showVersionDialog(),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                _buildMenuSection('Tài khoản', [
-                  _MenuItem(
-                    icon: Icons.logout_rounded,
-                    label: 'Đăng xuất',
-                    color: Colors.orange[700]!,
-                    onTap: () => _showLogoutDialog(),
-                  ),
-                ]),
-                const SizedBox(height: 32),
-              ],
-            ),
-          ),
-        ],
+                ),
+              )
+            else
+              SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    const SizedBox(height: 16),
+                    _buildUserCard(),
+                    const SizedBox(height: 16),
+                    _buildStatsRow(),
+                    const SizedBox(height: 20),
+                    _buildMenuSection('Hoạt động', [
+                      _MenuItem(
+                        icon: Icons.sports_tennis_rounded,
+                        label: 'Sân đã đặt',
+                        badge: _phieuList.length.toString(),
+                        color: AppColor.kCourtGreen,
+                        onTap: () => _push(BookingHistoryScreen(
+                          phieuList: _phieuList,
+                          sanList: _sanList,
+                          cumSanList: _cumSanList,
+                        )),
+                      ),
+                      _MenuItem(
+                        icon: Icons.local_offer_rounded,
+                        label: 'Voucher của tôi',
+                        badge: _voucherList
+                            .where((v) => v.ngayKetThuc.isAfter(DateTime.now()))
+                            .length
+                            .toString(),
+                        color: Colors.orange[700]!,
+                        onTap: () =>
+                            _push(VoucherScreen(voucherList: _voucherList)),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
+                    _buildMenuSection('Thông tin', [
+                      _MenuItem(
+                        icon: Icons.policy_outlined,
+                        label: 'Chính sách & Bảo mật',
+                        color: Colors.indigo,
+                        onTap: () => _push(const PolicyScreen()),
+                      ),
+                      _MenuItem(
+                        icon: Icons.info_outline_rounded,
+                        label: 'Phiên bản ứng dụng',
+                        color: Colors.blueGrey,
+                        trailing: _versionBadge(),
+                        onTap: () => _showVersionDialog(),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
+                    _buildMenuSection('Tài khoản', [
+                      _MenuItem(
+                        icon: Icons.logout_rounded,
+                        label: 'Đăng xuất',
+                        color: Colors.orange[700]!,
+                        onTap: () => _showLogoutDialog(),
+                      ),
+                    ]),
+                    const SizedBox(height: 32),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

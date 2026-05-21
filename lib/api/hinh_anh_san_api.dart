@@ -47,4 +47,22 @@ class HinhAnhSanApi {
 
     return {};
   }
+
+  static Future<String> getFirstHinhAnhByCumSan(String maCumSan) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ServerAddress().address}/anh-san/$maCumSan'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode == 200 && response.body.isNotEmpty) {
+        final List<dynamic> data = jsonDecode(response.body);
+        if (data.isNotEmpty) {
+          return data.first['duongDanHinhAnh'] as String? ?? _fallbackImage;
+        }
+      }
+    } catch (_) {}
+
+    return _fallbackImage;
+  }
 }
