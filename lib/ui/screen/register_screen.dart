@@ -30,7 +30,7 @@ class _BadmintonRegisterScreenState extends State<BadmintonRegisterScreen>
 
   final _userName    = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  final _roleCtrl = TextEditingController(text: "user");
+  final _roleCtrl = TextEditingController(text: "ROLE_USER");
   final _fullNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneNumber = TextEditingController();

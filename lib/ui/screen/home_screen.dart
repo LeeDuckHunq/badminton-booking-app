@@ -92,7 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final results = await Future.wait([
-        CumSanApi.getCumSan(10),
+        CumSanApi.getCumSan(1000),
         HinhAnhSanApi.getAllHinhAnhSan(),
         DistanceService.getCurrentPosition(),
       ]);

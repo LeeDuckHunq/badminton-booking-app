@@ -10,6 +10,7 @@ class CumSanModel {
   String sDT;
   String gioMoCua;
   String gioDongCua;
+  String trangThai;
 
   CumSanModel({
     required this.maCumSan,
@@ -19,6 +20,7 @@ class CumSanModel {
     required this.sDT,
     required this.gioMoCua,
     required this.gioDongCua,
+    required this.trangThai
   });
 
   factory CumSanModel.fromJson(Map<String, dynamic> json) {
@@ -30,6 +32,7 @@ class CumSanModel {
       sDT:         json['sDT']         as String? ?? '',
       gioMoCua:    json['gioMoCua']    as String? ?? '00:00',
       gioDongCua:  json['gioDongCua']  as String? ?? '00:00',
+      trangThai:   json['trangThai']   as String? ?? ''
     );
   }
 
