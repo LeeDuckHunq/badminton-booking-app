@@ -1,7 +1,7 @@
 // lib/ui/chat/screens/conversation_screen.dart
 
 import 'dart:async';
-import 'package:application/ui/chat/api/chat_api.dart';
+import 'package:application/api/chat_api.dart';
 import 'package:application/ui/chat/models/chat_models.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:flutter/material.dart';

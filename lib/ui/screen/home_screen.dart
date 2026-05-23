@@ -19,6 +19,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../home/widgets/home_header.dart';
 import '../home/widgets/home_search_bar.dart';
@@ -43,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   static const _avartarUrl =
       'https://encrypted-tbn0.gstatic.com/licensed-image?q=tbn:ANd9GcQjVuDVB12oj11fUHVG2fsgMKvglnd7eiANa4oR-6nZCbEZc_lajUm1iFn_Edl_0BwPwiDpfH_QefmCUNmvsPOUu4XlUJlcqg82LWyV3wdisFH-An2HNLLgVZ3sUpTbkyh2KfaPfgm_KCZf&s=19';
-  static const _notifCount = 3;
+  static const _notifCount = 0;
 
   List<CumSanModel> courtList      = [];
   Map<String, String> courtImage   = {};
@@ -508,7 +509,20 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-  void _onDirectionTap(CumSanModel court) {}
+  void _onDirectionTap(CumSanModel court) async {
+    final encodedAddress = Uri.encodeComponent(court.diaChi);
+
+    final Uri geoUrl = Uri.parse('geo:0,0?q=$encodedAddress');
+    final Uri webUrl = Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=$encodedAddress',
+    );
+
+    if (await canLaunchUrl(geoUrl)) {
+      await launchUrl(geoUrl, mode: LaunchMode.externalApplication);
+    } else {
+      await launchUrl(webUrl, mode: LaunchMode.externalApplication);
+    }
+  }
 
   void _onSearchTap() {
     Navigator.push(

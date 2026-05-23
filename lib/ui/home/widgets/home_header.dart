@@ -5,7 +5,7 @@ import 'package:application/ui/theme/app_color.dart';
 
 class HomeHeader extends StatelessWidget {
   final String userName;
-  final String dateLabel;       // e.g. "Thứ năm, 14/05/2026"
+  final String dateLabel;
   final String avartarUrl;
   final int notificationCount;
   final VoidCallback onNotificationTap;
