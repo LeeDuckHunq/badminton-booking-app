@@ -10,6 +10,7 @@ import 'package:application/model/khuyen_mai_model.dart';
 import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
 import 'package:application/model/user_model.dart';
+import 'package:application/security/AuthManager.dart';
 import 'package:application/ui/account/screens/voucher_screen.dart';
 import 'package:application/ui/screen/login_screen.dart';
 import 'package:application/ui/theme/app_color.dart';
@@ -708,7 +709,8 @@ class _AccountScreenState extends State<AccountScreen> {
                     color: Colors.grey[600], fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
+              await AuthManager.logout();
               Navigator.pop(context);
               Navigator.pushAndRemoveUntil(context,
                  MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);

@@ -1,7 +1,9 @@
 import 'package:application/api/phieu_dat_san_api.dart';
 import 'package:application/api/qr_api.dart';
 import 'package:application/api/san_api.dart';
+import 'package:application/security/AuthManager.dart';
 import 'package:application/ui/screen/account_screen.dart';
+import 'package:application/ui/screen/home_screen.dart';
 import 'package:application/ui/screen/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -15,10 +17,14 @@ void main() async {
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFta3VybmVtaGF3Z2FydGR6aHd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5Mzc0NzgsImV4cCI6MjA5NDUxMzQ3OH0.ZaDoOxVC1Hy2Id2JvDpmnFgFBdoC2wRm9IalESJuJAU',
   );
 
+  bool loggedIn = await AuthManager.isLoggedIn();
+
   runApp(
     MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: LoginScreen(),
+      home: loggedIn
+          ? HomeScreen()
+          : LoginScreen(),
     ),
   );
 }

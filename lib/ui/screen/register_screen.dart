@@ -238,8 +238,10 @@ class _BadmintonRegisterScreenState extends State<BadmintonRegisterScreen>
                       const SizedBox(height: 36),
                       _buildCard(),
                       const SizedBox(height: 28),
+                      /*
                       _buildSocial(),
                       const SizedBox(height: 32),
+                       */
                     ],
                   ),
                 ),

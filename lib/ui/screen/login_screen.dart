@@ -7,6 +7,8 @@ import 'package:application/ui/widget/app_button.dart';
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
@@ -108,24 +110,40 @@ class _BadmintonLoginScreenState extends State<BadmintonLoginScreen>
   }
 
   Future<void> _login() async {
-
-    var result = await AccountApi.login(_usernameCtrl.text, _passwordCtrl.text);
+    var result = await AccountApi.login(
+      _usernameCtrl.text,
+      _passwordCtrl.text,
+    );
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          result ? '🏸 Smash thành công! Vào sân thôi!' : "Đăng nhập không thành công."
+          result
+              ? '🏸 Smash thành công! Vào sân thôi!'
+              : "Đăng nhập không thành công.",
         ),
-        backgroundColor: result ? AppColor.kCourtGreen : AppColor.kAccentYellow,
+        backgroundColor: result
+            ? AppColor.kCourtGreen
+            : AppColor.kAccentYellow,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
       ),
     );
 
     if (result) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(
+        'remember_login',
+        _remember,
+      );
+
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => HomeScreen())
+        MaterialPageRoute(
+          builder: (context) => HomeScreen(),
+        ),
       );
     }
   }
@@ -201,8 +219,11 @@ class _BadmintonLoginScreenState extends State<BadmintonLoginScreen>
                       const SizedBox(height: 36),
                       _buildCard(),
                       const SizedBox(height: 28),
+                      /*
                       _buildSocial(),
                       const SizedBox(height: 32),
+
+                       */
                     ],
                   ),
                 ),
@@ -336,17 +357,6 @@ class _BadmintonLoginScreenState extends State<BadmintonLoginScreen>
               Text('Ghi nhớ đăng nhập',
                   style: TextStyle(color: Colors.grey[600], fontSize: 13)),
               const Spacer(),
-              GestureDetector(
-                onTap: () {},
-                child: const Text(
-                  'Quên mật khẩu?',
-                  style: TextStyle(
-                    color: AppColor.kCourtGreen,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
             ],
           ),
 
