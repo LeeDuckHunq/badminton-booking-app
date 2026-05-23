@@ -1,11 +1,14 @@
 // lib/ui/account/screens/booking_history_screen.dart
 
+import 'dart:convert';
+import 'package:application/api/server_address.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 
 class BookingHistoryScreen extends StatefulWidget {
   final List<PhieuDatSanModel> phieuList;
@@ -214,6 +217,20 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen>
   }
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Rút gọn mã dài: giữ prefix chữ + 5 ký tự số/uuid đầu rồi "…"
+/// VD: "PD_5a2df1f3-9f95-..." → "PD_5a2df…"
+String _shortenId(String id, {int keep = 5}) {
+  // Tìm vị trí bắt đầu phần hex/uuid (sau dấu _ hoặc từ đầu)
+  final underscoreIdx = id.indexOf('_');
+  final prefix = underscoreIdx >= 0 ? id.substring(0, underscoreIdx + 1) : '';
+  final rest   = underscoreIdx >= 0 ? id.substring(underscoreIdx + 1) : id;
+
+  if (rest.length <= keep) return id;
+  return '$prefix${rest.substring(0, keep)}…';
+}
+
 // ── Phiếu đặt card ────────────────────────────────────────────────────────────
 class _PhieuDatCard extends StatelessWidget {
   final PhieuDatSanModel phieu;
@@ -279,8 +296,9 @@ class _PhieuDatCard extends StatelessWidget {
                           fontSize: 13.5,
                         ),
                       ),
+                      // ← Mã rút gọn
                       Text(
-                        '#${phieu.maPhieuDat}',
+                        '#${_shortenId(phieu.maPhieuDat)}',
                         style: TextStyle(
                             color: Colors.grey[400], fontSize: 11),
                       ),
@@ -444,8 +462,36 @@ class _PhieuDatCard extends StatelessWidget {
   }
 }
 
+// ── Model hóa đơn ─────────────────────────────────────────────────────────────
+class HoaDonModel {
+  final String maHoaDon;
+  final String maPhieuDat;
+  final String? maKhuyenMai;
+  final double tongTien;
+  final DateTime ngayLap;
+  final String? billThanhToan;
+
+  HoaDonModel({
+    required this.maHoaDon,
+    required this.maPhieuDat,
+    this.maKhuyenMai,
+    required this.tongTien,
+    required this.ngayLap,
+    this.billThanhToan,
+  });
+
+  factory HoaDonModel.fromJson(Map<String, dynamic> json) => HoaDonModel(
+    maHoaDon:      json['maHoaDon'] as String,
+    maPhieuDat:    json['maPhieuDat'] as String,
+    maKhuyenMai:   json['maKhuyenMai'] as String?,
+    tongTien:      (json['tongTien'] as num).toDouble(),
+    ngayLap:       DateTime.parse(json['ngayLap'] as String),
+    billThanhToan: json['billThanhToan'] as String?,
+  );
+}
+
 // ── Invoice detail bottom sheet ───────────────────────────────────────────────
-class _InvoiceDetailSheet extends StatelessWidget {
+class _InvoiceDetailSheet extends StatefulWidget {
   final PhieuDatSanModel phieu;
   final SanModel? san;
   final CumSanModel? cumSan;
@@ -455,6 +501,48 @@ class _InvoiceDetailSheet extends StatelessWidget {
     required this.san,
     required this.cumSan,
   });
+
+  @override
+  State<_InvoiceDetailSheet> createState() => _InvoiceDetailSheetState();
+}
+
+class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
+  HoaDonModel? _hoaDon;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchHoaDon();
+  }
+
+  Future<void> _fetchHoaDon() async {
+    try {
+      print('MA PHIEU DAT: "${widget.phieu.maPhieuDat}"');
+      final uri = Uri.parse(
+          '${ServerAddress().address}/hoa-don/get-hoa-don/${widget.phieu.maPhieuDat}');
+      print('URI: $uri');
+      final res = await http.get(uri);
+      if (res.statusCode == 200) {
+        final json = jsonDecode(res.body) as Map<String, dynamic>;
+        setState(() {
+          _hoaDon  = HoaDonModel.fromJson(json);
+          _loading = false;
+        });
+      } else {
+        setState(() {
+          _error   = 'Lỗi ${res.statusCode}';
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error   = 'Không thể tải hóa đơn';
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -514,22 +602,59 @@ class _InvoiceDetailSheet extends StatelessWidget {
             ),
           ),
 
-          Flexible(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPad + 20),
+          // Body
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: CircularProgressIndicator(
+                  color: AppColor.kCourtGreen, strokeWidth: 2.5),
+            )
+          else if (_error != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
               child: Column(
                 children: [
-                  _invoiceCard(context),
+                  const Icon(Icons.error_outline_rounded,
+                      color: Colors.red, size: 40),
+                  const SizedBox(height: 10),
+                  Text(_error!,
+                      style: const TextStyle(color: Colors.red, fontSize: 13),
+                      textAlign: TextAlign.center),
+                  const SizedBox(height: 14),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() { _loading = true; _error = null; });
+                      _fetchHoaDon();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: AppColor.kCourtGreen,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text('Thử lại',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700)),
+                    ),
+                  ),
                 ],
               ),
+            )
+          else
+            Flexible(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPad + 20),
+                child: _invoiceCard(context, _hoaDon!),
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _invoiceCard(BuildContext context) {
+  Widget _invoiceCard(BuildContext context, HoaDonModel hoaDon) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -566,7 +691,7 @@ class _InvoiceDetailSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        cumSan?.tenCumSan ?? 'Cụm sân',
+                        widget.cumSan?.tenCumSan ?? 'Cụm sân',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
@@ -574,7 +699,7 @@ class _InvoiceDetailSheet extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        san?.tenSan ?? phieu.maSan,
+                        widget.san?.tenSan ?? widget.phieu.maSan,
                         style: TextStyle(
                             color: Colors.white.withOpacity(0.8),
                             fontSize: 12),
@@ -582,6 +707,7 @@ class _InvoiceDetailSheet extends StatelessWidget {
                     ],
                   ),
                 ),
+                // Mã hóa đơn rút gọn
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 4),
@@ -590,7 +716,7 @@ class _InvoiceDetailSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    '#${phieu.maPhieuDat}',
+                    '#${_shortenId(hoaDon.maHoaDon)}',
                     style: const TextStyle(
                       color: AppColor.kDeepGreen,
                       fontWeight: FontWeight.w900,
@@ -607,18 +733,23 @@ class _InvoiceDetailSheet extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                _detailRow('Địa chỉ', cumSan?.diaChi ?? '---'),
-                _detailRow('Ngày đặt', _fmtDate(phieu.ngayLap)),
+                _detailRow('Mã hóa đơn', _shortenId(hoaDon.maHoaDon)),
+                _detailRow('Mã phiếu đặt', _shortenId(widget.phieu.maPhieuDat)),
+                _detailRow('Địa chỉ', widget.cumSan?.diaChi ?? '---'),
+                _detailRow('Ngày lập HĐ', _fmtDate(hoaDon.ngayLap)),
                 _detailRow('Khung giờ',
-                    '${_fmtTime(phieu.batDau)} – ${_fmtTime(phieu.ketThuc)}',
+                    '${_fmtTime(widget.phieu.batDau)} – ${_fmtTime(widget.phieu.ketThuc)}',
                     valueColor: AppColor.kCourtGreen),
-                _detailRow('Ngày chơi', _fmtDate(phieu.batDau)),
-                if (phieu.maKhuyenMai != null)
-                  _detailRow('Mã KM', phieu.maKhuyenMai!,
+                _detailRow('Ngày chơi', _fmtDate(widget.phieu.batDau)),
+                if (hoaDon.maKhuyenMai != null)
+                  _detailRow('Mã KM', hoaDon.maKhuyenMai!,
                       valueColor: Colors.orange[700]!),
-                _detailRow('Trạng thái', _statusLabel(phieu.trangThai),
-                    valueColor: _statusColor(phieu.trangThai)),
+                _detailRow('Trạng thái', _statusLabel(widget.phieu.trangThai),
+                    valueColor: _statusColor(widget.phieu.trangThai)),
+
                 const Divider(height: 20),
+
+                // Tổng tiền
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -629,7 +760,7 @@ class _InvoiceDetailSheet extends StatelessWidget {
                           fontSize: 14,
                         )),
                     Text(
-                      _fmtCurrency(phieu.tongTien),
+                      _fmtCurrency(hoaDon.tongTien),
                       style: const TextStyle(
                         color: AppColor.kCourtGreen,
                         fontWeight: FontWeight.w900,
@@ -639,16 +770,79 @@ class _InvoiceDetailSheet extends StatelessWidget {
                   ],
                 ),
 
+                // ── Ảnh bill thanh toán ──────────────────────────────────
+                if (hoaDon.billThanhToan != null) ...[
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Bill thanh toán',
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        )),
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.network(
+                      hoaDon.billThanhToan!,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (_, child, progress) {
+                        if (progress == null) return child;
+                        return Container(
+                          height: 160,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              value: progress.expectedTotalBytes != null
+                                  ? progress.cumulativeBytesLoaded /
+                                  progress.expectedTotalBytes!
+                                  : null,
+                              color: AppColor.kCourtGreen,
+                              strokeWidth: 2.5,
+                            ),
+                          ),
+                        );
+                      },
+                      errorBuilder: (_, __, ___) => Container(
+                        height: 100,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.broken_image_outlined,
+                                  color: Colors.grey, size: 28),
+                              SizedBox(height: 6),
+                              Text('Không tải được ảnh',
+                                  style: TextStyle(
+                                      color: Colors.grey, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 14),
 
-                // Copy mã phiếu
+                // Copy mã hóa đơn (full)
                 GestureDetector(
                   onTap: () {
                     Clipboard.setData(
-                        ClipboardData(text: phieu.maPhieuDat));
+                        ClipboardData(text: hoaDon.maHoaDon));
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: const Text('Đã sao chép mã phiếu'),
+                        content: const Text('Đã sao chép mã hóa đơn'),
                         backgroundColor: AppColor.kCourtGreen,
                         behavior: SnackBarBehavior.floating,
                         duration: const Duration(seconds: 2),
@@ -666,13 +860,13 @@ class _InvoiceDetailSheet extends StatelessWidget {
                       border: Border.all(
                           color: Colors.green[200]!, width: 1),
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
+                      children: [
                         Icon(Icons.copy_rounded,
                             color: AppColor.kCourtGreen, size: 14),
                         SizedBox(width: 6),
-                        Text('Sao chép mã phiếu',
+                        Text('Sao chép mã hóa đơn',
                             style: TextStyle(
                               color: AppColor.kCourtGreen,
                               fontWeight: FontWeight.w700,
@@ -690,18 +884,17 @@ class _InvoiceDetailSheet extends StatelessWidget {
     );
   }
 
-  Widget _detailRow(String label, String value,
-      {Color? valueColor}) {
+  Widget _detailRow(String label, String value, {Color? valueColor}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 100,
+            width: 110,
             child: Text(label,
-                style: TextStyle(
-                    color: Colors.grey[500], fontSize: 12.5)),
+                style:
+                TextStyle(color: Colors.grey[500], fontSize: 12.5)),
           ),
           Expanded(
             child: Text(value,

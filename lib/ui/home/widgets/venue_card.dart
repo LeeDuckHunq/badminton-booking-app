@@ -7,14 +7,16 @@ import 'package:application/ui/theme/app_color.dart';
 class VenueCard extends StatefulWidget {
   final CumSanModel court;
   final String courtImage;
-  final String? distance;          // null = chưa có / không lấy được
-  final bool isLoadingDistance;    // true = đang tính khoảng cách
+  final String? distance;
+  final bool isLoadingDistance;
   final VoidCallback onBookTap;
   final VoidCallback onFavoriteTap;
   final VoidCallback onDirectionTap;
   final VoidCallback onCardTap;
+  final bool isFav;
 
   const VenueCard({
+    this.isFav = false,
     super.key,
     required this.court,
     required this.courtImage,
@@ -31,8 +33,6 @@ class VenueCard extends StatefulWidget {
 }
 
 class _VenueCardState extends State<VenueCard> {
-  bool _isFav = false;
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -112,12 +112,9 @@ class _VenueCardState extends State<VenueCard> {
             child: Row(
               children: [
                 _CircleBtn(
-                  icon: _isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                  color: _isFav ? Colors.redAccent : Colors.grey[600]!,
-                  onTap: () {
-                    setState(() => _isFav = !_isFav);
-                    widget.onFavoriteTap();
-                  },
+                  icon: widget.isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  color: widget.isFav ? Colors.redAccent : Colors.grey[600]!,
+                  onTap: () => widget.onFavoriteTap(),
                 ),
                 const SizedBox(width: 6),
                 _CircleBtn(

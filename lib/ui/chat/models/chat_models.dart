@@ -39,7 +39,7 @@ class ChatMessage {
 
     try {
       parsedTime = DateTime.parse(
-        '${json['thoiGianGui']}Z',
+        '${json['thoiGianGui']}',
       ).toLocal();
     } catch (_) {
       parsedTime = DateTime.now();

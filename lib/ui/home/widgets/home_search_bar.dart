@@ -7,12 +7,14 @@ class HomeSearchBar extends StatelessWidget {
   final VoidCallback onSearchTap;
   final VoidCallback onQrTap;
   final VoidCallback onFavoriteTap;
+  final bool hasFavorite;
 
   const HomeSearchBar({
     super.key,
     required this.onSearchTap,
     required this.onQrTap,
     required this.onFavoriteTap,
+    this.hasFavorite = false,
   });
 
   @override
@@ -106,8 +108,13 @@ class HomeSearchBar extends StatelessWidget {
                   ),
                 ],
               ),
-              child: const Icon(Icons.favorite_border_rounded,
-                  color: AppColor.kCourtGreen, size: 22),
+              child: Icon(
+                hasFavorite
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                color: hasFavorite ? Colors.redAccent : AppColor.kCourtGreen,
+                size: 22,
+              ),
             ),
           ),
         ],

@@ -2,10 +2,12 @@ import 'dart:io';
 import 'package:application/api/account_api.dart';
 import 'package:application/api/hoa_don_api.dart';
 import 'package:application/api/khuyen_mai_api.dart';
+import 'package:application/api/phieu_dat_san_api.dart';
 import 'package:application/model/hoa_don_request_model.dart';
 import 'package:application/model/khuyen_mai_model.dart';
 import 'package:application/model/user_model.dart';
 import 'package:application/ui/theme/app_color.dart';
+import 'package:application/utils/date_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -52,6 +54,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
   // ── Confirm ───────────────────────────────────────────────────────────────
   bool _isConfirming = false;
+  bool _daDatThanhToan = false;
 
   void loadUser() async {
     try {
@@ -276,6 +279,42 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     );
   }
 
+  Future<void> _deletePhieuDatVaQuayLai() async {
+    try {
+      await PhieuDatSanApi.deletePhieuDat(widget.maPhieuDat);
+    } catch (e) {
+      debugPrint('Lỗi xóa phiếu đặt: $e');
+    } finally {
+      if (mounted) Navigator.pop(context);
+    }
+  }
+
+  Future<void> _onPopRequested() async {
+    if (_daDatThanhToan) {
+      Navigator.pop(context);
+      return;
+    }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hủy đặt sân?'),
+        content: const Text('Bạn chưa thanh toán. Quay lại sẽ hủy phiếu đặt này.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Ở lại'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Hủy phiếu đặt'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) await _deletePhieuDatVaQuayLai();
+  }
+
   // ── Confirm booking ────────────────────────────────────────────────────────
   Future<void> _confirmBooking() async {
     if (_billUploadedUrl == null) {
@@ -293,11 +332,9 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     setState(() => _isConfirming = true);
 
     final now = DateTime.now();
-    final ngayLap = '${now.year}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')}'
-        'T${now.hour.toString().padLeft(2,'0')}:${now.minute.toString().padLeft(2,'0')}:${now.second.toString().padLeft(2,'0')}';
-
+    final ngayLap = toLocalIso(DateTime.now());
     final request = CreateHoaDonRequest(
-      maHoaDon: 'HD${now.millisecondsSinceEpoch}',  // auto generate
+      maHoaDon: 'HD${DateTime.now().millisecondsSinceEpoch}',
       maPhieuDat: widget.maPhieuDat,
       maKhuyenMai: _selectedMaKhuyenMai,
       tongTien: _tongTienSauGiam,
@@ -311,6 +348,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     setState(() => _isConfirming = false);
 
     if (success) {
+      setState(() => _daDatThanhToan = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('🏸 Đặt sân thành công! Chúng tôi sẽ xác nhận sớm.'),
@@ -335,16 +373,22 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F4),
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(child: _buildBody()),
-          _buildBottomBar(),
-          SizedBox(height: MediaQuery.of(context).padding.bottom),
-        ],
-      ),
+    return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) _onPopRequested();
+        },
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF4F6F4),
+          body: Column(
+            children: [
+              _buildHeader(),
+              Expanded(child: _buildBody()),
+              _buildBottomBar(),
+              SizedBox(height: MediaQuery.of(context).padding.bottom),
+            ],
+          ),
+        )
     );
   }
 
@@ -366,7 +410,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
               IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded,
                     color: AppColor.kLineWhite, size: 20),
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => _onPopRequested(),
               ),
               const Expanded(
                 child: Column(

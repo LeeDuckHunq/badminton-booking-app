@@ -325,7 +325,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
           maPhieuDat: maPhieuDat,
         ),
       ),
-    );
+    ).then((_) => setState(() {}));
 
     // 6. Reload lịch sân sau khi navigate
     setState(() => _clearSelection());

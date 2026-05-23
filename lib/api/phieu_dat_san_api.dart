@@ -41,8 +41,6 @@ class PhieuDatSanApi {
     );
   }
 
-  // lib/api/phieu_dat_san_api.dart
-
   static Future<String?> createPhieuDat(CreatePhieuDatModel request) async {
     try {
       final response = await http.post(
@@ -79,5 +77,23 @@ class PhieuDatSanApi {
     }
 
     throw Exception('Không lấy được lịch đặt sân');
+  }
+
+  static Future<bool> deletePhieuDat(String maPhieuDat) async {
+    final uri = Uri.parse('${ServerAddress().address}/phieu-dat-san/delete-phieu-dat/$maPhieuDat');
+
+    final response = await http.delete(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) {
+      return true;
+    } else {
+      final body = response.body.isNotEmpty ? jsonDecode(response.body) : {};
+      throw Exception(body['message'] ?? 'Xóa phiếu đặt thất bại (${response.statusCode})');
+    }
   }
 }

@@ -1,11 +1,13 @@
 // lib/ui/home/home_screen.dart
 
+import 'package:application/api/FavoriteApi.dart';
 import 'package:application/api/cum_san_api.dart';
 import 'package:application/api/hinh_anh_san_api.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/services/distance_service.dart';
 import 'package:application/ui/screen/ClaimVoucherScreen.dart';
 import 'package:application/ui/screen/chat_screen.dart';
+import 'package:application/ui/screen/favorite_list_screen.dart';
 import 'package:application/ui/screen/highlight_screen.dart';
 import 'package:application/ui/screen/account_screen.dart';
 import 'package:application/ui/screen/booking_schedule_screen.dart';
@@ -51,6 +53,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingDistances = false;
   Position? _userPosition;
 
+  Set<String> _favMaCumSanSet = {};
+  Map<String, String> _favMaFavMap = {};
+
   // ── Filter ─────────────────────────────────────────────────────────────────
   FilterModel _filter = const FilterModel();
 
@@ -81,10 +86,62 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadData();
   }
 
+  Future<void> _loadFavorites({String? username}) async {
+    final name = username ?? _userName;
+    if (name.isEmpty) return;
+    try {
+      final map = await FavoriteApi.getFavorites(_userName);
+      if (!mounted) return;
+      setState(() {
+        _favMaFavMap    = map;
+        _favMaCumSanSet = map.keys.toSet();
+      });
+    } catch (e) {
+      debugPrint('Lỗi load favorites: $e');
+    }
+  }
+
+  Future<void> _toggleFavorite(String maCumSan) async {
+    if (_userName.isEmpty) return;
+    final isFav = _favMaCumSanSet.contains(maCumSan);
+
+    if (isFav) {
+      final maFav = _favMaFavMap[maCumSan];
+      if (maFav == null) return;
+
+      setState(() {
+        _favMaCumSanSet.remove(maCumSan);
+        _favMaFavMap.remove(maCumSan);
+      });
+
+      final ok = await FavoriteApi.deleteFavorite(maFav);
+      if (!ok && mounted) {
+        setState(() {
+          _favMaCumSanSet.add(maCumSan);
+          _favMaFavMap[maCumSan] = maFav;
+        });
+      }
+    } else {
+      // Optimistic update UI trước
+      setState(() => _favMaCumSanSet.add(maCumSan));
+
+      final ok = await FavoriteApi.addFavorite(_userName, maCumSan);
+      if (ok && mounted) {
+        // Gọi lại để lấy maFav vừa được tạo
+        await _loadFavorites();
+      } else if (!ok && mounted) {
+        // Roll back nếu thất bại
+        setState(() => _favMaCumSanSet.remove(maCumSan));
+      }
+    }
+  }
+
   Future<void> _loadUser() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
-    setState(() => _userName = prefs.getString('username') ?? '');
+    final username = prefs.getString('username') ?? '';
+    setState(() => _userName = username);
+    await _loadFavorites(username: username);
   }
 
   Future<void> _loadData() async {
@@ -159,14 +216,18 @@ class _HomeScreenState extends State<HomeScreen> {
         index: _currentTab.index,
         children: [
           // HOME TAB
-          Column(
-            children: [
-              _buildGreenHeader(),
-              Expanded(child: _buildBody()),
-            ],
+          RefreshIndicator(
+            color: AppColor.kCourtGreen,
+            onRefresh: () async => _loadData(), // hoặc gọi lại _loadData()
+            child: Column(
+              children: [
+                _buildGreenHeader(),
+                Expanded(child: _buildBody()),
+              ],
+            ),
           ),
 
-          // MAP TAB
+          // CHAT TAB
           const ChatScreen(),
 
           // EXPLORE TAB
@@ -220,6 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onSearchTap: _onSearchTap,
             onQrTap: _onQrTap,
             onFavoriteTap: _onFavoriteTap,
+            hasFavorite:   _favMaCumSanSet.isNotEmpty,
           ),
           Container(
             height: 18,
@@ -415,7 +477,8 @@ class _HomeScreenState extends State<HomeScreen> {
           distance: distance,
           isLoadingDistance: _isLoadingDistances && distance == null,
           onBookTap: () => _goToBooking(court),
-          onFavoriteTap: _onFavoriteTap,
+          isFav: _favMaCumSanSet.contains(court.maCumSan),
+          onFavoriteTap: () => _toggleFavorite(court.maCumSan),
           onDirectionTap: () => _onDirectionTap(court),
           onCardTap: () => _goToBooking(court),
         ),
@@ -431,7 +494,20 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onNotificationTap() {}
   void _onAvatarTap() {}
   void _onQrTap() {}
-  void _onFavoriteTap() {}
+  void _onFavoriteTap() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FavoriteListScreen(
+          courtList:      courtList,
+          courtImage:     courtImage,
+          favMaCumSanSet: _favMaCumSanSet,
+          onFavoriteTap:  _toggleFavorite,
+          onBookTap:      _goToBooking,
+        ),
+      ),
+    );
+  }
   void _onDirectionTap(CumSanModel court) {}
 
   void _onSearchTap() {
