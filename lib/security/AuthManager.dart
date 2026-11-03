@@ -26,5 +26,6 @@ class AuthManager {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');
     await prefs.remove('remember_login');
+    await prefs.remove('role');
   }
 }

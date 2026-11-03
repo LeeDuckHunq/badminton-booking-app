@@ -23,18 +23,14 @@ class AccountApi {
 
     if (response.statusCode == 200) {
       try {
-
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
         final prefs = await SharedPreferences.getInstance();
-
-        await prefs.setString("jwt_token", response.body);
-        await prefs.setString("username", username);
-
-        print(prefs.getString("jwt_token"));
-        print(prefs.getString("username"));
+        await prefs.setString("jwt_token", data['token'] as String);
+        await prefs.setString("username", data['username'] as String? ?? username);
+        await prefs.setString("role", data['role'] as String? ?? 'ROLE_USER');
 
       } catch (e) {
-
-        print(e);
+        return false;
       }
       return true;
     }
