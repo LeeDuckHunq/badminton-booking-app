@@ -1,467 +1,247 @@
 // lib/ui/account/screens/booking_history_screen.dart
-
 import 'dart:convert';
+
 import 'package:application/api/api_client.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
+import 'package:application/ui/screen/booking_schedule_screen.dart';
 import 'package:application/ui/theme/app_color.dart';
+import 'package:application/ui/theme/app_theme.dart';
+import 'package:application/ui/widget/sz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+/// M16 – Sân đã đặt (lịch sử đặt sân).
 class BookingHistoryScreen extends StatefulWidget {
   final List<PhieuDatSanModel> phieuList;
-  final List<SanModel> sanList;
-  final List<CumSanModel> cumSanList;
+  final Map<String, SanModel> sanMap;
+  final Map<String, CumSanModel> cumSanMap;
+  final Map<String, String> images;
 
-  const BookingHistoryScreen({
-    super.key,
-    required this.phieuList,
-    required this.sanList,
-    required this.cumSanList,
-  });
+  const BookingHistoryScreen({super.key, required this.phieuList, required this.sanMap, required this.cumSanMap, this.images = const {}});
 
   @override
   State<BookingHistoryScreen> createState() => _BookingHistoryScreenState();
 }
 
-class _BookingHistoryScreenState extends State<BookingHistoryScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabCtrl;
+class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
+  static const _filters = [
+    (null, 'Tất cả', null),
+    ('CHO_XAC_NHAN', 'Chờ xác nhận', AppColor.pending),
+    ('DA_XAC_NHAN', 'Đã xác nhận', AppColor.confirmed),
+    ('DA_HOAN_THANH', 'Hoàn thành', AppColor.completed),
+    ('DA_HUY', 'Đã huỷ', AppColor.danger),
+  ];
+  String? _status;
 
-  final _tabs = const ['Tất cả', 'Chờ xác nhận', 'Đã xác nhận'];
-
-  List<PhieuDatSanModel> _filtered(String tab) {
-    if (tab == 'Chờ xác nhận') {
-      return widget.phieuList
-          .where((p) => p.trangThai == 'CHO_XAC_NHAN')
-          .toList();
-    }
-    if (tab == 'Đã xác nhận') {
-      return widget.phieuList
-          .where((p) => p.trangThai == 'DA_XAC_NHAN')
-          .toList();
-    }
-    return widget.phieuList;
-  }
-
-  SanModel? _getSan(String maSan) =>
-      widget.sanList.where((s) => s.maSan == maSan).firstOrNull;
-
-  CumSanModel? _getCumSan(String maCumSan) =>
-      widget.cumSanList.where((c) => c.maCumSan == maCumSan).firstOrNull;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabCtrl = TabController(length: _tabs.length, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabCtrl.dispose();
-    super.dispose();
+  CumSanModel? _venueOf(PhieuDatSanModel p) {
+    final san = widget.sanMap[p.maSan];
+    return san == null ? null : widget.cumSanMap[san.maCumSan];
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F4),
-      body: Column(
-        children: [
-          _buildHeader(context),
-          _buildTabBar(),
-          Expanded(
-            child: TabBarView(
-              controller: _tabCtrl,
-              children: _tabs
-                  .map((tab) => _buildList(_filtered(tab)))
-                  .toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+    final sorted = [...widget.phieuList]..sort((a, b) => b.batDau.compareTo(a.batDau));
+    final list = _status == null ? sorted : sorted.where((p) => p.trangThai == _status).toList();
 
-  Widget _buildHeader(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColor.kDeepGreen, AppColor.kCourtGreen],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 16, 14),
-          child: Row(
+    return Scaffold(
+      appBar: const SzTopBar(title: 'Sân đã đặt', subtitle: 'Lịch sử đặt sân của bạn'),
+      body: Column(children: [
+        Container(
+          color: Colors.white,
+          height: 58,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                    color: AppColor.kLineWhite, size: 20),
-                onPressed: () => Navigator.pop(context),
-              ),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Sân đã đặt',
-                        style: TextStyle(
-                          color: AppColor.kLineWhite,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        )),
-                    Text('Lịch sử đặt sân của bạn',
-                        style:
-                        TextStyle(color: Colors.white70, fontSize: 12.5)),
-                  ],
-                ),
-              ),
-              Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColor.kAccentYellow,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '${widget.phieuList.length} phiếu',
-                  style: const TextStyle(
-                    color: AppColor.kDeepGreen,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
+              for (final (code, label, dot) in _filters) ...[
+                SzChip(label, dot: dot, count: code == null ? widget.phieuList.length : widget.phieuList.where((p) => p.trangThai == code).length, selected: _status == code, onTap: () => setState(() => _status = code)),
+                const SizedBox(width: 8),
+              ],
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildTabBar() {
-    return Container(
-      color: Colors.white,
-      child: TabBar(
-        controller: _tabCtrl,
-        labelColor: AppColor.kCourtGreen,
-        unselectedLabelColor: Colors.grey[500],
-        indicatorColor: AppColor.kCourtGreen,
-        indicatorWeight: 2.5,
-        labelStyle: const TextStyle(
-            fontWeight: FontWeight.w700, fontSize: 13),
-        unselectedLabelStyle:
-        const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-        tabs: _tabs.map((t) => Tab(text: t)).toList(),
-      ),
-    );
-  }
-
-  Widget _buildList(List<PhieuDatSanModel> list) {
-    if (list.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.sports_tennis_rounded,
-                color: Colors.grey[300], size: 52),
-            const SizedBox(height: 12),
-            Text('Không có phiếu đặt nào',
-                style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500)),
-          ],
+        Expanded(
+          child: list.isEmpty
+              ? const SzEmptyState(icon: Icons.event_note_outlined, title: 'Không có phiếu đặt nào', message: 'Các lần đặt sân của bạn sẽ hiển thị tại đây.')
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  itemCount: list.length + 1,
+                  separatorBuilder: (_, __) => const SizedBox(height: 14),
+                  itemBuilder: (_, i) {
+                    if (i == list.length) {
+                      return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        const Icon(Icons.verified_user_outlined, size: 16, color: AppColor.textMuted),
+                        const SizedBox(width: 6),
+                        Text('Mọi đơn đặt đều được chủ sân xác nhận trên hệ thống', style: AppText.bodySm()),
+                      ]);
+                    }
+                    final p = list[i];
+                    final venue = _venueOf(p);
+                    return _BookingTicket(
+                      phieu: p,
+                      san: widget.sanMap[p.maSan],
+                      venue: venue,
+                      image: venue == null ? null : widget.images[venue.maCumSan],
+                      onInvoice: () => showInvoiceSheet(context, p, widget.sanMap[p.maSan], venue),
+                    );
+                  },
+                ),
         ),
-      );
-    }
-
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: list.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, i) {
-        final phieu = list[i];
-        final san = _getSan(phieu.maSan);
-        final cumSan =
-        san != null ? _getCumSan(san.maCumSan) : null;
-
-        return _PhieuDatCard(
-          phieu: phieu,
-          san: san,
-          cumSan: cumSan,
-          onViewInvoice: () => _showInvoiceSheet(context, phieu, san, cumSan),
-        );
-      },
-    );
-  }
-
-  void _showInvoiceSheet(
-      BuildContext context,
-      PhieuDatSanModel phieu,
-      SanModel? san,
-      CumSanModel? cumSan,
-      ) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _InvoiceDetailSheet(
-          phieu: phieu, san: san, cumSan: cumSan),
+      ]),
     );
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/// Rút gọn mã dài: giữ prefix chữ + 5 ký tự số/uuid đầu rồi "…"
-/// VD: "PD_5a2df1f3-9f95-..." → "PD_5a2df…"
-String _shortenId(String id, {int keep = 5}) {
-  // Tìm vị trí bắt đầu phần hex/uuid (sau dấu _ hoặc từ đầu)
-  final underscoreIdx = id.indexOf('_');
-  final prefix = underscoreIdx >= 0 ? id.substring(0, underscoreIdx + 1) : '';
-  final rest   = underscoreIdx >= 0 ? id.substring(underscoreIdx + 1) : id;
-
-  if (rest.length <= keep) return id;
-  return '$prefix${rest.substring(0, keep)}…';
-}
-
-// ── Phiếu đặt card ────────────────────────────────────────────────────────────
-class _PhieuDatCard extends StatelessWidget {
+class _BookingTicket extends StatelessWidget {
   final PhieuDatSanModel phieu;
   final SanModel? san;
-  final CumSanModel? cumSan;
-  final VoidCallback onViewInvoice;
+  final CumSanModel? venue;
+  final String? image;
+  final VoidCallback onInvoice;
 
-  const _PhieuDatCard({
-    required this.phieu,
-    required this.san,
-    required this.cumSan,
-    required this.onViewInvoice,
-  });
+  const _BookingTicket({required this.phieu, required this.san, required this.venue, required this.image, required this.onInvoice});
 
   @override
   Widget build(BuildContext context) {
-    final statusInfo = _statusInfo(phieu.trangThai);
+    final s = BookingStatus.of(phieu.trangThai);
+    final cancelled = phieu.trangThai == 'DA_HUY';
+    final hours = phieu.ketThuc.difference(phieu.batDau).inMinutes / 60;
+    final now = DateTime.now();
+    final daysLeft = DateTime(phieu.batDau.year, phieu.batDau.month, phieu.batDau.day).difference(DateTime(now.year, now.month, now.day)).inDays;
 
+    final (hintIcon, hintText, hintBg, hintFg) = switch (phieu.trangThai) {
+      'CHO_XAC_NHAN' => (Icons.receipt_long_outlined, 'Chờ chủ sân duyệt thanh toán', const Color(0xFFFEF3C7), const Color(0xFFB45309)),
+      'DA_XAC_NHAN' when phieu.ketThuc.isAfter(now) => (Icons.alarm_rounded, daysLeft <= 0 ? 'Lịch hôm nay' : 'Lịch sắp tới · Còn $daysLeft ngày', const Color(0xFFDBEAFE), const Color(0xFF1D4ED8)),
+      'DA_XAC_NHAN' => (Icons.event_available_rounded, 'Đã qua giờ chơi', const Color(0xFFDBEAFE), const Color(0xFF1D4ED8)),
+      'DA_HOAN_THANH' => (Icons.sports_score_rounded, 'Đã kết thúc lượt chơi', const Color(0xFFDCFCE7), const Color(0xFF15803D)),
+      'DA_HUY' => (Icons.info_outline_rounded, 'Đơn đã bị huỷ', const Color(0xFFFEE2E2), const Color(0xFFB91C1C)),
+      _ => (Icons.help_outline_rounded, 'Không xác định', AppColor.slot, AppColor.textMuted),
+    };
+
+    final venueName = venue?.tenCumSan ?? 'Cụm sân';
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            decoration: BoxDecoration(
-              color: statusInfo.$3.withOpacity(0.08),
-              borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: statusInfo.$3.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(statusInfo.$2,
-                      color: statusInfo.$3, size: 18),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        cumSan?.tenCumSan ?? 'Cụm sân',
-                        style: const TextStyle(
-                          color: AppColor.kTextDark,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13.5,
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(AppRadius.lg), boxShadow: AppShadow.card),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(width: 5, color: s.accent),
+          Expanded(
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Text(Fmt.shortCode(phieu.maPhieuDat), style: AppText.headlineSm(color: cancelled ? AppColor.textMuted : AppColor.text)),
+                    const SizedBox(width: 2),
+                    SzIconButton(Icons.content_copy_rounded, size: 30, color: AppColor.textMuted, onPressed: () {
+                      Clipboard.setData(ClipboardData(text: phieu.maPhieuDat));
+                      showSzSnack(context, 'Đã sao chép mã phiếu');
+                    }),
+                    const Spacer(),
+                    StatusBadge(phieu.trangThai),
+                  ]),
+                  const SizedBox(height: 8),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: cancelled
+                          ? Container(width: 72, height: 72, color: const Color(0xFF1F2937), child: const Icon(Icons.block_rounded, color: Colors.white70))
+                          : SzNetworkImage(image, width: 72, height: 72),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(
+                          venueName,
+                          style: AppText.headlineSm(color: cancelled ? AppColor.textMuted : AppColor.forest).copyWith(decoration: cancelled ? TextDecoration.lineThrough : null),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(san?.tenSan ?? phieu.maSan, style: AppText.body(color: AppColor.textMuted)),
+                        const SizedBox(height: 4),
+                        _line(Icons.calendar_today_outlined, Fmt.dateLong(phieu.batDau)),
+                        _line(Icons.schedule_rounded, '${Fmt.range(phieu.batDau, phieu.ketThuc)} (${Fmt.hoursCount(hours)})'),
+                      ]),
+                    ),
+                  ]),
+                ]),
+              ),
+              const Padding(padding: EdgeInsets.symmetric(horizontal: 14), child: SzDashedDivider()),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                child: Column(children: [
+                  Row(children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: hintBg, borderRadius: BorderRadius.circular(6)),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(hintIcon, size: 14, color: hintFg),
+                            const SizedBox(width: 4),
+                            Flexible(child: Text(hintText, style: AppText.label(color: hintFg), overflow: TextOverflow.ellipsis)),
+                          ]),
                         ),
                       ),
-                      // ← Mã rút gọn
-                      Text(
-                        '#${_shortenId(phieu.maPhieuDat)}',
-                        style: TextStyle(
-                            color: Colors.grey[400], fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusInfo.$3,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    statusInfo.$1,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Body
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-            child: Column(
-              children: [
-                _infoRow(Icons.sports_tennis_rounded,
-                    san?.tenSan ?? phieu.maSan,
-                    AppColor.kCourtGreen),
-                const SizedBox(height: 6),
-                _infoRow(Icons.location_on_outlined,
-                    cumSan?.diaChi ?? '---',
-                    Colors.grey[500]!),
-                const SizedBox(height: 6),
-                _infoRow(Icons.access_time_rounded,
-                    '${_fmtTime(phieu.batDau)} – ${_fmtTime(phieu.ketThuc)}  •  ${_fmtDate(phieu.batDau)}',
-                    Colors.grey[500]!),
-              ],
-            ),
-          ),
-
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 14),
-            child: Divider(height: 20),
-          ),
-
-          // Footer
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-            child: Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Tổng tiền',
-                        style: TextStyle(
-                            color: Colors.grey[500], fontSize: 11.5)),
+                    const SizedBox(width: 8),
                     Text(
-                      _fmtCurrency(phieu.tongTien),
-                      style: const TextStyle(
-                        color: AppColor.kCourtGreen,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
+                      Fmt.money(phieu.tongTien),
+                      style: AppText.stat(size: 20, color: cancelled ? AppColor.textMuted : AppColor.primaryDark).copyWith(decoration: cancelled ? TextDecoration.lineThrough : null),
                     ),
-                  ],
-                ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: onViewInvoice,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 9),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [
-                          AppColor.kDeepGreen,
-                          AppColor.kCourtGreen
-                        ],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.receipt_long_rounded,
-                            color: Colors.white, size: 14),
-                        SizedBox(width: 6),
-                        Text('Xem hóa đơn',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12.5,
-                            )),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
+                  ]),
+                  const SizedBox(height: 12),
+                  _actions(context),
+                ]),
+              ),
+            ]),
           ),
-        ],
+        ]),
       ),
     );
   }
 
-  Widget _infoRow(IconData icon, String text, Color iconColor) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 14, color: iconColor),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(text,
-              style: TextStyle(
-                  color: Colors.grey[700], fontSize: 12.5),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis),
-        ),
-      ],
-    );
-  }
+  Widget _line(IconData icon, String text) => Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Row(children: [
+          Icon(icon, size: 14, color: AppColor.textMuted),
+          const SizedBox(width: 6),
+          Expanded(child: Text(text, style: AppText.bodySm(color: AppColor.text))),
+        ]),
+      );
 
-  (String, IconData, Color) _statusInfo(String status) {
-    switch (status) {
+  Widget _actions(BuildContext context) {
+    final invoice = SzButton.small('Xem hoá đơn', icon: Icons.receipt_long_outlined, kind: SzButtonKind.soft, expand: true, onPressed: onInvoice);
+    switch (phieu.trangThai) {
       case 'DA_XAC_NHAN':
-        return ('Đã xác nhận', Icons.check_circle_rounded,
-        AppColor.kCourtGreen);
-      case 'CHO_XAC_NHAN':
-        return ('Chờ xác nhận', Icons.access_time_rounded,
-        const Color(0xFFFF8F00));
+        return Row(children: [
+          Expanded(child: invoice),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SzButton.small('Chỉ đường', icon: Icons.near_me_outlined, expand: true, onPressed: venue == null ? null : () => launchUrl(Uri.parse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(venue!.diaChi)}'), mode: LaunchMode.externalApplication)),
+          ),
+        ]);
+      case 'DA_HOAN_THANH':
       case 'DA_HUY':
-        return ('Đã huỷ', Icons.cancel_rounded, Colors.red);
+        return Row(children: [
+          Expanded(child: invoice),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SzButton.small('Đặt lại sân', icon: Icons.replay_rounded, kind: SzButtonKind.dark, expand: true, onPressed: venue == null ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => BookingScheduleScreen(cumSan: venue!)))),
+          ),
+        ]);
       default:
-        return ('Không xác định', Icons.help_outline_rounded,
-        Colors.grey);
+        return SzButton.small('Xem hoá đơn', icon: Icons.receipt_long_outlined, kind: SzButtonKind.dark, expand: true, trailingIcon: Icons.arrow_forward_rounded, onPressed: onInvoice);
     }
-  }
-
-  String _fmtTime(DateTime dt) =>
-      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-
-  String _fmtDate(DateTime dt) =>
-      '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
-
-  String _fmtCurrency(double v) {
-    final s = v.toStringAsFixed(0);
-    final buf = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) buf.write('.');
-      buf.write(s[i]);
-    }
-    return '${buf.toString()} đ';
   }
 }
 
-// ── Model hóa đơn ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════ M17 – CHI TIẾT HOÁ ĐƠN ═══════════════════════════════
+
 class HoaDonModel {
   final String maHoaDon;
   final String maPhieuDat;
@@ -470,42 +250,38 @@ class HoaDonModel {
   final DateTime ngayLap;
   final String? billThanhToan;
 
-  HoaDonModel({
-    required this.maHoaDon,
-    required this.maPhieuDat,
-    this.maKhuyenMai,
-    required this.tongTien,
-    required this.ngayLap,
-    this.billThanhToan,
-  });
+  HoaDonModel({required this.maHoaDon, required this.maPhieuDat, this.maKhuyenMai, required this.tongTien, required this.ngayLap, this.billThanhToan});
 
   factory HoaDonModel.fromJson(Map<String, dynamic> json) => HoaDonModel(
-    maHoaDon:      json['maHoaDon'] as String,
-    maPhieuDat:    json['maPhieuDat'] as String,
-    maKhuyenMai:   json['maKhuyenMai'] as String?,
-    tongTien:      (json['tongTien'] as num).toDouble(),
-    ngayLap:       DateTime.parse(json['ngayLap'] as String),
-    billThanhToan: json['billThanhToan'] as String?,
+        maHoaDon: json['maHoaDon'] as String? ?? '',
+        maPhieuDat: json['maPhieuDat'] as String? ?? '',
+        maKhuyenMai: json['maKhuyenMai'] as String?,
+        tongTien: (json['tongTien'] as num?)?.toDouble() ?? 0,
+        ngayLap: DateTime.tryParse('${json['ngayLap']}') ?? DateTime.now(),
+        billThanhToan: json['billThanhToan'] as String?,
+      );
+}
+
+Future<void> showInvoiceSheet(BuildContext context, PhieuDatSanModel phieu, SanModel? san, CumSanModel? venue) {
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => _InvoiceSheet(phieu: phieu, san: san, venue: venue),
   );
 }
 
-// ── Invoice detail bottom sheet ───────────────────────────────────────────────
-class _InvoiceDetailSheet extends StatefulWidget {
+class _InvoiceSheet extends StatefulWidget {
   final PhieuDatSanModel phieu;
   final SanModel? san;
-  final CumSanModel? cumSan;
+  final CumSanModel? venue;
 
-  const _InvoiceDetailSheet({
-    required this.phieu,
-    required this.san,
-    required this.cumSan,
-  });
+  const _InvoiceSheet({required this.phieu, required this.san, required this.venue});
 
   @override
-  State<_InvoiceDetailSheet> createState() => _InvoiceDetailSheetState();
+  State<_InvoiceSheet> createState() => _InvoiceSheetState();
 }
 
-class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
+class _InvoiceSheetState extends State<_InvoiceSheet> {
   HoaDonModel? _hoaDon;
   bool _loading = true;
   String? _error;
@@ -513,30 +289,32 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
   @override
   void initState() {
     super.initState();
-    _fetchHoaDon();
+    _fetch();
   }
 
-  Future<void> _fetchHoaDon() async {
+  Future<void> _fetch() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final res = await ApiClient.get(
-          '/hoa-don/get-hoa-don/${Uri.encodeComponent(widget.phieu.maPhieuDat)}');
+      final res = await ApiClient.get('/hoa-don/get-hoa-don/${Uri.encodeComponent(widget.phieu.maPhieuDat)}');
       if (!mounted) return;
       if (res.statusCode == 200) {
-        final json = jsonDecode(res.body) as Map<String, dynamic>;
         setState(() {
-          _hoaDon  = HoaDonModel.fromJson(json);
+          _hoaDon = HoaDonModel.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
           _loading = false;
         });
       } else {
         setState(() {
-          _error   = res.statusCode == 404 ? 'Chưa có hóa đơn' : 'Lỗi ${res.statusCode}';
+          _error = res.statusCode == 404 ? 'Phiếu đặt này chưa có hoá đơn (chưa thanh toán).' : 'Lỗi ${res.statusCode}';
           _loading = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error   = 'Không thể tải hóa đơn';
+        _error = 'Không thể tải hoá đơn';
         _loading = false;
       });
     }
@@ -544,400 +322,201 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomPad = MediaQuery.of(context).padding.bottom;
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF4F6F4),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle
-          Container(
-            width: 36,
-            height: 4,
-            margin: const EdgeInsets.only(top: 12, bottom: 4),
-            decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2)),
-          ),
-
-          // Title
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppColor.kDeepGreen, AppColor.kCourtGreen],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
+    final p = widget.phieu;
+    final s = BookingStatus.of(p.trangThai);
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const SzSheetHandle(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 16, 8),
+          child: Row(children: [
+            SzIconButton(Icons.close_rounded, onPressed: () => Navigator.pop(context)),
+            const SizedBox(width: 4),
+            Text('Chi tiết hoá đơn', style: AppText.headlineMd()),
+            const SizedBox(width: 8),
+            StatusBadge(p.trangThai),
+          ]),
+        ),
+        Flexible(
+          child: ListView(
+            shrinkWrap: true,
+            padding: EdgeInsets.fromLTRB(16, 4, 16, 16 + MediaQuery.of(context).padding.bottom),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: const Color(0xFFD7FDDB), borderRadius: BorderRadius.circular(AppRadius.lg)),
+                child: Row(children: [
+                  Container(width: 48, height: 48, decoration: BoxDecoration(color: s.bg, shape: BoxShape.circle), child: Icon(s.icon, color: s.fg)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Đơn ${Fmt.shortCode(p.maPhieuDat)}', style: AppText.headlineMd()),
+                      Text(s.label, style: AppText.label(color: s.fg)),
+                    ]),
                   ),
-                  child: const Icon(Icons.receipt_long_rounded,
-                      color: Colors.white, size: 17),
-                ),
-                const SizedBox(width: 10),
-                const Text('Chi tiết hóa đơn',
-                    style: TextStyle(
-                      color: AppColor.kTextDark,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                    )),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: const Icon(Icons.close_rounded,
-                      color: Colors.grey, size: 22),
+                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Text('Tổng tiền', style: AppText.bodySm()),
+                    Text(Fmt.money(_hoaDon?.tongTien ?? p.tongTien), style: AppText.stat(size: 22, color: AppColor.primaryDark)),
+                  ]),
+                ]),
+              ),
+              const SizedBox(height: 12),
+              if (_loading)
+                const Padding(padding: EdgeInsets.symmetric(vertical: 32), child: SzLoading(message: 'Đang tải hoá đơn…'))
+              else if (_error != null)
+                _venueBlock(includePrice: false, footer: Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Row(children: [
+                    const Icon(Icons.info_outline_rounded, color: AppColor.pending, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(_error!, style: AppText.body(color: AppColor.textMuted))),
+                    TextButton(onPressed: _fetch, child: const Text('Thử lại')),
+                  ]),
+                ))
+              else
+                _venueBlock(includePrice: true),
+              if (_hoaDon?.billThanhToan != null) ...[
+                const SizedBox(height: 12),
+                SzCard(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const SzSectionTitle(Icons.image_outlined, 'Bill thanh toán'),
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: () => _zoom(context, _hoaDon!.billThanhToan!),
+                      child: ClipRRect(borderRadius: BorderRadius.circular(AppRadius.md), child: SzNetworkImage(_hoaDon!.billThanhToan, height: 260, width: double.infinity, fit: BoxFit.cover)),
+                    ),
+                    const SizedBox(height: 6),
+                    Text('Chạm để phóng to', style: AppText.bodySm()),
+                  ]),
                 ),
               ],
-            ),
+            ],
           ),
-
-          // Body
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: CircularProgressIndicator(
-                  color: AppColor.kCourtGreen, strokeWidth: 2.5),
-            )
-          else if (_error != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-              child: Column(
-                children: [
-                  const Icon(Icons.error_outline_rounded,
-                      color: Colors.red, size: 40),
-                  const SizedBox(height: 10),
-                  Text(_error!,
-                      style: const TextStyle(color: Colors.red, fontSize: 13),
-                      textAlign: TextAlign.center),
-                  const SizedBox(height: 14),
-                  GestureDetector(
-                    onTap: () {
-                      setState(() { _loading = true; _error = null; });
-                      _fetchHoaDon();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 9),
-                      decoration: BoxDecoration(
-                        color: AppColor.kCourtGreen,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Text('Thử lại',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            Flexible(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPad + 20),
-                child: _invoiceCard(context, _hoaDon!),
-              ),
-            ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 
-  Widget _invoiceCard(BuildContext context, HoaDonModel hoaDon) {
+  Widget _venueBlock({required bool includePrice, Widget? footer}) {
+    final p = widget.phieu;
+    final hd = _hoaDon;
+    final hours = p.ketThuc.difference(p.batDau).inMinutes / 60;
+    final discount = hd == null ? 0.0 : (p.tongTien - hd.tongTien).clamp(0, double.infinity).toDouble();
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(AppRadius.lg), boxShadow: AppShadow.card, border: const Border(top: BorderSide(color: AppColor.primary, width: 4))),
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (hd != null) ...[
+          Row(children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  const Icon(Icons.receipt_outlined, size: 15, color: AppColor.textMuted),
+                  const SizedBox(width: 4),
+                  Text('MÃ HOÁ ĐƠN', style: AppText.labelSm()),
+                ]),
+                const SizedBox(height: 2),
+                Row(children: [
+                  Flexible(child: Text(Fmt.shortCode(hd.maHoaDon.replaceFirst('HD_', '')).replaceFirst('#', 'HD-'), style: AppText.headlineSm())),
+                  SzIconButton(Icons.content_copy_rounded, size: 32, color: AppColor.primary, onPressed: () {
+                    Clipboard.setData(ClipboardData(text: hd.maHoaDon));
+                    showSzSnack(context, 'Đã sao chép mã hoá đơn');
+                  }),
+                ]),
+              ]),
+            ),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('Thời gian tạo', style: AppText.bodySm()),
+              Text('${Fmt.date(hd.ngayLap)} · ${Fmt.hhmm(hd.ngayLap)}', style: AppText.labelLg()),
+            ]),
+          ]),
+          const SizedBox(height: 12),
         ],
-      ),
-      child: Column(
-        children: [
-          // Green header
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColor.kDeepGreen, AppColor.kCourtGreen],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius:
-              BorderRadius.vertical(top: Radius.circular(16)),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: AppColor.canvas, borderRadius: BorderRadius.circular(AppRadius.md)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(widget.venue?.tenCumSan ?? 'Cụm sân', style: AppText.headlineSm(color: AppColor.primaryDark)),
+            const SizedBox(height: 4),
+            Row(children: [
+              const Icon(Icons.sports_tennis_rounded, size: 15, color: AppColor.textMuted),
+              const SizedBox(width: 6),
+              Text(widget.san?.tenSan ?? p.maSan, style: AppText.labelLg()),
+            ]),
+            if (widget.venue != null) ...[
+              const SizedBox(height: 4),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Icon(Icons.location_on_outlined, size: 15, color: AppColor.textMuted),
+                const SizedBox(width: 6),
+                Expanded(child: Text(widget.venue!.diaChi, style: AppText.body(color: AppColor.textMuted))),
+              ]),
+            ],
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: _miniBox(Icons.calendar_today_rounded, 'NGÀY ĐẤU', Fmt.dateShort(p.batDau))),
+              const SizedBox(width: 8),
+              Expanded(child: _miniBox(Icons.schedule_rounded, 'KHUNG GIỜ', Fmt.range(p.batDau, p.ketThuc))),
+            ]),
+            const SizedBox(height: 8),
+            Text('Thời lượng: ${Fmt.hoursCount(hours)} (${(hours * 2).round()} khung 30 phút)', style: AppText.bodySm()),
+          ]),
+        ),
+        if (includePrice && hd != null) ...[
+          const SizedBox(height: 14),
+          const SzDashedDivider(),
+          const SizedBox(height: 12),
+          Row(children: [
+            const Icon(Icons.payments_outlined, size: 18, color: AppColor.textMuted),
+            const SizedBox(width: 6),
+            Text('CHI TIẾT GIÁ & THANH TOÁN', style: AppText.labelSm()),
+          ]),
+          const SizedBox(height: 6),
+          SzInfoRow('Giá thuê sân (${Fmt.hoursCount(hours)})', Fmt.money(p.tongTien)),
+          if (hd.maKhuyenMai != null) SzInfoRow('Voucher ${hd.maKhuyenMai}', '-${Fmt.money(discount)}', valueColor: AppColor.primary),
+          SzInfoRow('Phương thức', 'Chuyển khoản'),
+          const Divider(),
+          Row(children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Tổng thanh toán', style: AppText.headlineSm()),
+                Text(BookingStatus.of(p.trangThai).label, style: AppText.label(color: BookingStatus.of(p.trangThai).fg)),
+              ]),
             ),
-            child: Row(
-              children: [
-                const Icon(Icons.sports_tennis_rounded,
-                    color: Colors.white, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.cumSan?.tenCumSan ?? 'Cụm sân',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(
-                        widget.san?.tenSan ?? widget.phieu.maSan,
-                        style: TextStyle(
-                            color: Colors.white.withOpacity(0.8),
-                            fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-                // Mã hóa đơn rút gọn
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColor.kAccentYellow,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '#${_shortenId(hoaDon.maHoaDon)}',
-                    style: const TextStyle(
-                      color: AppColor.kDeepGreen,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Details
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _detailRow('Mã hóa đơn', _shortenId(hoaDon.maHoaDon)),
-                _detailRow('Mã phiếu đặt', _shortenId(widget.phieu.maPhieuDat)),
-                _detailRow('Địa chỉ', widget.cumSan?.diaChi ?? '---'),
-                _detailRow('Ngày lập HĐ', _fmtDate(hoaDon.ngayLap)),
-                _detailRow('Khung giờ',
-                    '${_fmtTime(widget.phieu.batDau)} – ${_fmtTime(widget.phieu.ketThuc)}',
-                    valueColor: AppColor.kCourtGreen),
-                _detailRow('Ngày chơi', _fmtDate(widget.phieu.batDau)),
-                if (hoaDon.maKhuyenMai != null)
-                  _detailRow('Mã KM', hoaDon.maKhuyenMai!,
-                      valueColor: Colors.orange[700]!),
-                _detailRow('Trạng thái', _statusLabel(widget.phieu.trangThai),
-                    valueColor: _statusColor(widget.phieu.trangThai)),
-
-                const Divider(height: 20),
-
-                // Tổng tiền
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Tổng tiền',
-                        style: TextStyle(
-                          color: AppColor.kTextDark,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        )),
-                    Text(
-                      _fmtCurrency(hoaDon.tongTien),
-                      style: const TextStyle(
-                        color: AppColor.kCourtGreen,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ],
-                ),
-
-                // ── Ảnh bill thanh toán ──────────────────────────────────
-                if (hoaDon.billThanhToan != null) ...[
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Bill thanh toán',
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                        )),
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.network(
-                      hoaDon.billThanhToan!,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      loadingBuilder: (_, child, progress) {
-                        if (progress == null) return child;
-                        return Container(
-                          height: 160,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              value: progress.expectedTotalBytes != null
-                                  ? progress.cumulativeBytesLoaded /
-                                  progress.expectedTotalBytes!
-                                  : null,
-                              color: AppColor.kCourtGreen,
-                              strokeWidth: 2.5,
-                            ),
-                          ),
-                        );
-                      },
-                      errorBuilder: (_, __, ___) => Container(
-                        height: 100,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.broken_image_outlined,
-                                  color: Colors.grey, size: 28),
-                              SizedBox(height: 6),
-                              Text('Không tải được ảnh',
-                                  style: TextStyle(
-                                      color: Colors.grey, fontSize: 12)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 14),
-
-                // Copy mã hóa đơn (full)
-                GestureDetector(
-                  onTap: () {
-                    Clipboard.setData(
-                        ClipboardData(text: hoaDon.maHoaDon));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text('Đã sao chép mã hóa đơn'),
-                        backgroundColor: AppColor.kCourtGreen,
-                        behavior: SnackBarBehavior.floating,
-                        duration: const Duration(seconds: 2),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColor.kMintField,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: Colors.green[200]!, width: 1),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.copy_rounded,
-                            color: AppColor.kCourtGreen, size: 14),
-                        SizedBox(width: 6),
-                        Text('Sao chép mã hóa đơn',
-                            style: TextStyle(
-                              color: AppColor.kCourtGreen,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                            )),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+            Text(Fmt.money(hd.tongTien), style: AppText.stat(size: 24, color: AppColor.primaryDark)),
+          ]),
         ],
-      ),
+        if (footer != null) footer,
+      ]),
     );
   }
 
-  Widget _detailRow(String label, String value, {Color? valueColor}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(label,
-                style:
-                TextStyle(color: Colors.grey[500], fontSize: 12.5)),
-          ),
+  Widget _miniBox(IconData icon, String label, String value) => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(AppRadius.md)),
+        child: Row(children: [
+          Container(width: 34, height: 34, decoration: const BoxDecoration(color: AppColor.mint, shape: BoxShape.circle), child: Icon(icon, size: 18, color: AppColor.primary)),
+          const SizedBox(width: 8),
           Expanded(
-            child: Text(value,
-                style: TextStyle(
-                  color: valueColor ?? AppColor.kTextDark,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                )),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: AppText.labelSm()),
+              FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(value, style: AppText.labelLg(), maxLines: 1)),
+            ]),
           ),
-        ],
+        ]),
+      );
+
+  void _zoom(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(12),
+        backgroundColor: Colors.black,
+        child: Stack(children: [
+          InteractiveViewer(child: Image.network(url, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox(height: 200, child: Center(child: Text('Không tải được ảnh', style: TextStyle(color: Colors.white)))))),
+          Positioned(top: 4, right: 4, child: SzIconButton(Icons.close_rounded, color: Colors.white, onPressed: () => Navigator.pop(ctx))),
+        ]),
       ),
     );
-  }
-
-  String _statusLabel(String s) {
-    switch (s) {
-      case 'DA_XAC_NHAN':  return 'Đã xác nhận';
-      case 'CHO_XAC_NHAN': return 'Chờ xác nhận';
-      case 'DA_HUY':       return 'Đã huỷ';
-      default:             return s;
-    }
-  }
-
-  Color _statusColor(String s) {
-    switch (s) {
-      case 'DA_XAC_NHAN':  return AppColor.kCourtGreen;
-      case 'CHO_XAC_NHAN': return const Color(0xFFFF8F00);
-      case 'DA_HUY':       return Colors.red;
-      default:             return Colors.grey;
-    }
-  }
-
-  String _fmtTime(DateTime dt) =>
-      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-
-  String _fmtDate(DateTime dt) =>
-      '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
-
-  String _fmtCurrency(double v) {
-    final s = v.toStringAsFixed(0);
-    final buf = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) buf.write('.');
-      buf.write(s[i]);
-    }
-    return '${buf.toString()} đ';
   }
 }

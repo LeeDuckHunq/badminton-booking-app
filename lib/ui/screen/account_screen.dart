@@ -1,7 +1,7 @@
-// lib/ui/account/account_screen.dart
-
+// lib/ui/screen/account_screen.dart
 import 'package:application/api/account_api.dart';
 import 'package:application/api/cum_san_api.dart';
+import 'package:application/api/hinh_anh_san_api.dart';
 import 'package:application/api/khuyen_mai_api.dart';
 import 'package:application/api/phieu_dat_san_api.dart';
 import 'package:application/api/san_api.dart';
@@ -11,14 +11,16 @@ import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
 import 'package:application/model/user_model.dart';
 import 'package:application/security/AuthManager.dart';
+import 'package:application/ui/account/screens/booking_history_screen.dart';
 import 'package:application/ui/account/screens/voucher_screen.dart';
 import 'package:application/ui/screen/login_screen.dart';
 import 'package:application/ui/theme/app_color.dart';
+import 'package:application/ui/theme/app_theme.dart';
+import 'package:application/ui/widget/sz.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../account/screens/booking_history_screen.dart';
-
+/// M15 – Tài khoản (tab).
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
 
@@ -29,731 +31,270 @@ class AccountScreen extends StatefulWidget {
 class _AccountScreenState extends State<AccountScreen> {
   UserModel? _user;
   List<PhieuDatSanModel> _phieuList = [];
-  List<KhuyenMaiModel> _voucherList = [];
-  List<SanModel> _sanList = [];
-  List<CumSanModel> _cumSanList = [];
-  bool _isLoading = true;
+  List<KhuyenMaiModel> _vouchers = [];
+  Map<String, SanModel> _sanMap = {};
+  Map<String, CumSanModel> _cumSanMap = {};
+  Map<String, String> _images = {};
+  bool _loading = true;
+  bool _failed = false;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _load();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
     try {
-      setState(() {
-        _isLoading = true;
-        _phieuList.clear();
-        _voucherList.clear();
-        _sanList.clear();
-        _cumSanList.clear();
-      });
-
       final prefs = await SharedPreferences.getInstance();
-      String? username = prefs.getString("username");
+      final username = prefs.getString('username');
+      if (username == null) throw Exception('missing username');
 
-      if (username == null) {
-        throw Exception("Không tìm thấy username");
-      }
+      final results = await Future.wait([
+        AccountApi.getUser(username),
+        PhieuDatSanApi.getPhieuDatSanTheoUser(username),
+        KhuyenMaiApi.getKhuyenMaiTheoUser(username),
+        HinhAnhSanApi.getAllHinhAnhSan(),
+      ]);
+      final phieuList = results[1] as List<PhieuDatSanModel>;
 
-      // Load data chính
-      final user = await AccountApi.getUser(username);
-
-      final phieuList =
-      await PhieuDatSanApi.getPhieuDatSanTheoUser(username);
-
-      final voucherList =
-      await KhuyenMaiApi.getKhuyenMaiTheoUser(username);
-
-      // Load sân + cụm sân
-      List<SanModel> sanList = [];
-      List<CumSanModel> cumSanList = [];
-
-      for (var phieu in phieuList) {
-        try {
-          final san = await SanApi.getSanInfo(phieu.maSan);
-
-          if (san != null) {
-            sanList.add(san);
-
-            final cumSan =
-            await CumSanApi.getCumSanInfo(san.maCumSan);
-
-            if (cumSan != null) {
-              cumSanList.add(cumSan);
-            }
-          }
-        } catch (e) {
-          debugPrint("Load san/cumSan error: $e");
-        }
-      }
+      // Tra cứu sân và cụm sân (mỗi mã chỉ gọi 1 lần, song song).
+      final sanIds = phieuList.map((p) => p.maSan).toSet();
+      final sans = await Future.wait(sanIds.map((id) => SanApi.getSanInfo(id).catchError((_) => null)));
+      final sanMap = {for (final s in sans.whereType<SanModel>()) s.maSan: s};
+      final venueIds = sanMap.values.map((s) => s.maCumSan).toSet();
+      final venues = await Future.wait(venueIds.map((id) => CumSanApi.getCumSanInfo(id).catchError((_) => null)));
 
       if (!mounted) return;
-
       setState(() {
-        _user = user;
+        _user = results[0] as UserModel;
         _phieuList = phieuList;
-        _voucherList = voucherList;
-        _sanList = sanList;
-        _cumSanList = cumSanList;
-        _isLoading = false;
+        _vouchers = results[2] as List<KhuyenMaiModel>;
+        _images = results[3] as Map<String, String>;
+        _sanMap = sanMap;
+        _cumSanMap = {for (final v in venues.whereType<CumSanModel>()) v.maCumSan: v};
+        _loading = false;
       });
     } catch (e) {
-      debugPrint("Load account error: $e");
-
-      if (!mounted) return;
-
-      setState(() {
-        _isLoading = false;
-      });
+      debugPrint('Load account error: $e');
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _failed = true;
+        });
+      }
     }
   }
 
-  @override
+  void _push(Widget screen) => Navigator.push(context, MaterialPageRoute(builder: (_) => screen)).then((_) => _load());
+
+  Future<void> _logout() async {
+    final ok = await showSzConfirm(context, title: 'Đăng xuất?', message: 'Bạn có chắc muốn đăng xuất khỏi SmashZone?', confirmLabel: 'Đăng xuất', icon: Icons.logout_rounded, destructive: true);
+    if (!ok || !mounted) return;
+    await AuthManager.logout();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
+  }
+
+  void _showVersion() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const SzLogo(size: 64),
+            const SizedBox(height: 14),
+            Text('SmashZone', style: AppText.headlineLg(color: AppColor.primaryDark)),
+            Text('Đặt sân cầu lông nhanh chóng', style: AppText.body(color: AppColor.textMuted)),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(color: AppColor.canvas, borderRadius: BorderRadius.circular(AppRadius.md)),
+              child: Column(children: const [
+                SzInfoRow('Phiên bản', 'v1.0.0'),
+                SzInfoRow('Bản dựng', '1'),
+                SzInfoRow('Môi trường', 'Production'),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            SzButton('Đóng', expand: true, kind: SzButtonKind.soft, onPressed: () => Navigator.pop(ctx)),
+          ]),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFFF4F6F4),
-      child: RefreshIndicator(
-        color: AppColor.kCourtGreen,
-        onRefresh: _loadData,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            _buildSliverHeader(),
-            if (_isLoading)
-              const SliverFillRemaining(
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: AppColor.kCourtGreen,
-                    strokeWidth: 2.5,
-                  ),
-                ),
-              )
-            else
-              SliverToBoxAdapter(
-                child: Column(
-                  children: [
-                    const SizedBox(height: 16),
-                    _buildUserCard(),
-                    const SizedBox(height: 16),
-                    _buildStatsRow(),
-                    const SizedBox(height: 20),
-                    _buildMenuSection('Hoạt động', [
-                      _MenuItem(
-                        icon: Icons.sports_tennis_rounded,
-                        label: 'Sân đã đặt',
-                        badge: _phieuList.length.toString(),
-                        color: AppColor.kCourtGreen,
-                        onTap: () => _push(BookingHistoryScreen(
-                          phieuList: _phieuList,
-                          sanList: _sanList,
-                          cumSanList: _cumSanList,
-                        )),
-                      ),
-                      _MenuItem(
-                        icon: Icons.local_offer_rounded,
-                        label: 'Voucher của tôi',
-                        badge: _voucherList
-                            .where((v) => v.ngayKetThuc.isAfter(DateTime.now()))
-                            .length
-                            .toString(),
-                        color: Colors.orange[700]!,
-                        onTap: () =>
-                            _push(VoucherScreen(voucherList: _voucherList)),
-                      ),
-                    ]),
-                    const SizedBox(height: 12),
-                    _buildMenuSection('Thông tin', [
-                      _MenuItem(
-                        icon: Icons.policy_outlined,
-                        label: 'Chính sách & Bảo mật',
-                        color: Colors.indigo,
-                        onTap: () => _push(const PolicyScreen()),
-                      ),
-                      _MenuItem(
-                        icon: Icons.info_outline_rounded,
-                        label: 'Phiên bản ứng dụng',
-                        color: Colors.blueGrey,
-                        trailing: _versionBadge(),
-                        onTap: () => _showVersionDialog(),
-                      ),
-                    ]),
-                    const SizedBox(height: 12),
-                    _buildMenuSection('Tài khoản', [
-                      _MenuItem(
-                        icon: Icons.logout_rounded,
-                        label: 'Đăng xuất',
-                        color: Colors.orange[700]!,
-                        onTap: () => _showLogoutDialog(),
-                      ),
-                    ]),
-                    const SizedBox(height: 32),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+    final u = _user;
+    final confirmed = _phieuList.where((p) => p.trangThai == 'DA_XAC_NHAN').length;
+    final pending = _phieuList.where((p) => p.trangThai == 'CHO_XAC_NHAN').length;
+    final name = u == null ? '' : (u.fullName.isEmpty ? u.username : u.fullName);
 
-  // ── Sliver header ─────────────────────────────────────────────────────────
-  Widget _buildSliverHeader() {
-    final topPadding = MediaQuery.of(context).padding.top;
-
-    return SliverAppBar(
-      expandedHeight: 165,
-      floating: false,
-      pinned: true,
-      backgroundColor: AppColor.kDeepGreen,
-      automaticallyImplyLeading: false,
-      elevation: 0,
-      actions: [
-        IconButton(
-          onPressed: _isLoading
-              ? null
-              : () async {
-            await _loadData();
-
-            if (!mounted) return;
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                    "Cập nhật dữ liệu thành công!"
-                ),
-                backgroundColor: AppColor.kCourtGreen,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            );
-          },
-          icon: _isLoading
-              ? const SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Colors.white,
-            ),
-          )
-              : const Icon(
-            Icons.refresh_rounded,
-            color: Colors.white,
-          ),
-        ),
-      ],
-      flexibleSpace: FlexibleSpaceBar(
-        background: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                AppColor.kDeepGreen,
-                AppColor.kCourtGreen,
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              topPadding + 16,
-              20,
-              16,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Spacer(),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.sports_tennis_rounded,
-                      color: AppColor.kAccentYellow,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'SmashZone',
-                      style: TextStyle(
-                        color: AppColor.kAccentYellow,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const Spacer()
-                  ],
-                ),
-                const Text(
-                  'Tài khoản',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 28,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                Text(
-                  _user?.email ?? '',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      title: const Text(
-        'Tài khoản',
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
-          fontSize: 17,
-        ),
-      ),
-    );
-  }
-
-  // ── User info card ────────────────────────────────────────────────────────
-  Widget _buildUserCard() {
-    if (_user == null) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.07),
-              blurRadius: 14,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            // Avatar
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColor.kCourtGreen.withOpacity(0.35),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: CircleAvatar(
-                radius: 30,
-                backgroundImage: NetworkImage(
-                  'https://encrypted-tbn0.gstatic.com/licensed-image?q=tbn:ANd9GcQjVuDVB12oj11fUHVG2fsgMKvglnd7eiANa4oR-6nZCbEZc_lajUm1iFn_Edl_0BwPwiDpfH_QefmCUNmvsPOUu4XlUJlcqg82LWyV3wdisFH-An2HNLLgVZ3sUpTbkyh2KfaPfgm_KCZf&s=19',
-                ),
-                onBackgroundImageError: (_, __) {},
-                child: _user!.fullName.isNotEmpty ? null : const Icon(
-                  Icons.person_rounded,
-                  color: Colors.white,
-                  size: 34,
-                ),
-              ),
-            ),
-
-            const SizedBox(width: 14),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(_user!.fullName,
-                      style: const TextStyle(
-                        color: AppColor.kTextDark,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                      )),
-                  const SizedBox(height: 3),
-                  _infoChip(Icons.alternate_email_rounded, _user!.username),
-                  const SizedBox(height: 3),
-                  _infoChip(Icons.phone_outlined, _user!.phoneNumber),
-                  const SizedBox(height: 3),
-                  _infoChip(Icons.email_outlined, _user!.email),
-                ],
-              ),
-            ),
-
-            // Role badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColor.kMintField,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green[200]!, width: 1),
-              ),
-              child: Text(
-                _user!.role,
-                style: const TextStyle(
-                  color: AppColor.kCourtGreen,
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _infoChip(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 11, color: Colors.grey[400]),
-        const SizedBox(width: 4),
+    return Scaffold(
+      body: Column(children: [
+        SzBrandHeader(subtitle: 'Tài khoản', userName: name),
         Expanded(
-          child: Text(text,
-              style: TextStyle(color: Colors.grey[600], fontSize: 11.5),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
-        ),
-      ],
-    );
-  }
-
-  // ── Stats row ─────────────────────────────────────────────────────────────
-  Widget _buildStatsRow() {
-    final confirmed = _phieuList
-        .where((p) => p.trangThai == 'DA_XAC_NHAN')
-        .length;
-    final pending = _phieuList
-        .where((p) => p.trangThai == 'CHO_XAC_NHAN')
-        .length;
-    final activeVoucher = _voucherList
-        .where((v) => v.ngayKetThuc.isAfter(DateTime.now()))
-        .length;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          _statCard('$confirmed', 'Đã xác nhận', AppColor.kCourtGreen,
-              Icons.check_circle_rounded),
-          const SizedBox(width: 10),
-          _statCard('$pending', 'Chờ xác nhận', const Color(0xFFFF8F00),
-              Icons.access_time_rounded),
-          const SizedBox(width: 10),
-          _statCard('$activeVoucher', 'Voucher', Colors.purple,
-              Icons.local_offer_rounded),
-        ],
-      ),
-    );
-  }
-
-  Widget _statCard(
-      String value, String label, Color color, IconData icon) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 6),
-            Text(value,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                )),
-            Text(label,
-                style: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w500,
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              children: [
+                if (_loading && u == null) ...[
+                  const SzSkeleton(height: 170, radius: AppRadius.lg),
+                  const SizedBox(height: 14),
+                  const SzSkeleton(height: 110, radius: AppRadius.lg),
+                ] else if (_failed && u == null)
+                  SzErrorState(message: 'Không tải được thông tin tài khoản.', onRetry: _load)
+                else if (u != null) ...[
+                  _profileCard(u, name),
+                  const SizedBox(height: 14),
+                  Row(children: [
+                    Expanded(child: _StatTile(icon: Icons.event_available_rounded, iconBg: const Color(0xFFB2F2BA), value: confirmed, label: 'Đã xác nhận', sub: 'Sắp tới', color: AppColor.primaryDark)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _StatTile(icon: Icons.pending_actions_rounded, iconBg: const Color(0xFFFFE170), value: pending, label: 'Chờ xác nhận', sub: 'Chờ duyệt', color: AppColor.pending)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _StatTile(icon: Icons.confirmation_number_outlined, iconBg: AppColor.mint, value: _vouchers.length, label: 'Voucher', sub: 'Khả dụng', color: AppColor.accentDeep)),
+                  ]),
+                ],
+                const SizedBox(height: 14),
+                SzCard(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Column(children: [
+                    _MenuTile(
+                      icon: Icons.sports_tennis_rounded,
+                      label: 'Sân đã đặt',
+                      badge: _phieuList.isEmpty ? null : SzPill('${_phieuList.length} phiếu'),
+                      onTap: () => _push(BookingHistoryScreen(phieuList: _phieuList, sanMap: _sanMap, cumSanMap: _cumSanMap, images: _images)),
+                    ),
+                    _MenuTile(
+                      icon: Icons.confirmation_number_outlined,
+                      iconBg: const Color(0xFFFFE170),
+                      iconColor: AppColor.text,
+                      label: 'Voucher của tôi',
+                      badge: _vouchers.isEmpty ? null : SzPill.accent('${_vouchers.length} voucher'),
+                      onTap: () => _push(VoucherScreen(voucherList: _vouchers)),
+                    ),
+                    _MenuTile(icon: Icons.verified_user_outlined, label: 'Chính sách & Bảo mật', onTap: () => _push(const PolicyScreen())),
+                    _MenuTile(
+                      icon: Icons.info_outline_rounded,
+                      iconBg: AppColor.canvas,
+                      iconColor: AppColor.textMuted,
+                      label: 'Phiên bản ứng dụng',
+                      trailing: Text('v1.0.0', style: AppText.bodyLg(color: AppColor.textMuted)),
+                      onTap: _showVersion,
+                    ),
+                  ]),
                 ),
-                textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Menu section ──────────────────────────────────────────────────────────
-  Widget _buildMenuSection(String title, List<_MenuItem> items) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 8),
-            child: Text(title,
-                style: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                )),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
+                const SizedBox(height: 16),
+                SzButton('Đăng xuất', expand: true, height: 56, icon: Icons.logout_rounded, kind: SzButtonKind.dangerSoft, onPressed: _logout),
               ],
             ),
-            child: Column(
-              children: items.asMap().entries.map((entry) {
-                final i    = entry.key;
-                final item = entry.value;
-                return Column(
-                  children: [
-                    _buildMenuItem(item),
-                    if (i < items.length - 1)
-                      Divider(
-                          height: 1,
-                          indent: 56,
-                          color: Colors.grey[100]),
-                  ],
-                );
-              }).toList(),
-            ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMenuItem(_MenuItem item) {
-    return InkWell(
-      onTap: item.onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: item.color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(item.icon, color: item.color, size: 18),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(item.label,
-                  style: TextStyle(
-                    color: item.labelColor ?? AppColor.kTextDark,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  )),
-            ),
-            if (item.badge != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: item.color.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(item.badge!,
-                    style: TextStyle(
-                      color: item.color,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    )),
-              )
-            else if (item.trailing != null)
-              item.trailing!
-            else
-              Icon(Icons.arrow_forward_ios_rounded,
-                  size: 14, color: Colors.grey[400]),
-          ],
         ),
-      ),
+      ]),
     );
   }
 
-  // ── Version badge ─────────────────────────────────────────────────────────
-  Widget _versionBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColor.kMintField,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.green[200]!, width: 1),
-      ),
-      child: const Text('v1.0.0',
-          style: TextStyle(
-            color: AppColor.kCourtGreen,
-            fontWeight: FontWeight.w700,
-            fontSize: 12,
-          )),
-    );
-  }
-
-  // ── Dialogs ───────────────────────────────────────────────────────────────
-
-  void _showVersionDialog() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Container(
-              width: 36, height: 36,
-              decoration: BoxDecoration(
-                color: AppColor.kAccentYellow,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.sports_tennis_rounded,
-                  color: AppColor.kDeepGreen, size: 20),
-            ),
-            const SizedBox(width: 10),
-            const Text('SmashZone',
-                style: TextStyle(
-                    fontWeight: FontWeight.w900, fontSize: 16)),
-          ],
+  Widget _profileCard(UserModel u, String name) {
+    final roleLabel = switch (u.role) {
+      'ROLE_ADMIN' => 'Quản trị viên',
+      'ROLE_OWNER' => 'Chủ sân',
+      _ => 'Thành viên SmashZone',
+    };
+    return SzCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(children: [
+        Row(children: [
+          SzAvatar(name, size: 72, online: true),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(name, style: AppText.headlineMd(), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text('@${u.username}', style: AppText.body(color: AppColor.textMuted)),
+              const SizedBox(height: 6),
+              SzPill.accent(roleLabel, icon: Icons.workspace_premium_outlined),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 14),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: AppColor.canvas, borderRadius: BorderRadius.circular(AppRadius.md)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _contact(Icons.phone_iphone_rounded, u.phoneNumber.isEmpty ? 'Chưa cập nhật số điện thoại' : u.phoneNumber),
+            const SizedBox(height: 8),
+            _contact(Icons.mail_outline_rounded, u.email.isEmpty ? 'Chưa cập nhật email' : u.email),
+          ]),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _versionRow('Phiên bản', '1.0.0'),
-            _versionRow('Build', '2026051001'),
-            _versionRow('Môi trường', 'Production'),
-            _versionRow('Phát triển bởi', 'SmashZone Team'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Đóng',
-                style: TextStyle(
-                    color: AppColor.kCourtGreen,
-                    fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+      ]),
     );
   }
 
-  Widget _versionRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(label,
-                style: TextStyle(
-                    color: Colors.grey[500], fontSize: 13)),
-          ),
-          Text(value,
-              style: const TextStyle(
-                  color: AppColor.kTextDark,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13)),
-        ],
-      ),
-    );
-  }
+  Widget _contact(IconData icon, String text) => Row(children: [
+        Icon(icon, size: 18, color: AppColor.primary),
+        const SizedBox(width: 10),
+        Expanded(child: Text(text, style: AppText.body(), overflow: TextOverflow.ellipsis)),
+      ]);
+}
 
-  void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        title: const Text('Đăng xuất',
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
-        content: const Text(
-            'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản không?',
-            style: TextStyle(fontSize: 14)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Huỷ',
-                style: TextStyle(
-                    color: Colors.grey[600], fontWeight: FontWeight.w600)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await AuthManager.logout();
-              Navigator.pop(context);
-              Navigator.pushAndRemoveUntil(context,
-                 MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange[700],
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-            ),
-            child: const Text('Đăng xuất',
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-    );
-  }
+class _StatTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconBg;
+  final int value;
+  final String label;
+  final String sub;
+  final Color color;
 
-  // ── Helper ────────────────────────────────────────────────────────────────
-  void _push(Widget screen) {
-    Navigator.push(
-        context, MaterialPageRoute(builder: (_) => screen));
+  const _StatTile({required this.icon, required this.iconBg, required this.value, required this.label, required this.sub, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return SzCard(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+      child: Column(children: [
+        Container(width: 34, height: 34, decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle), child: Icon(icon, size: 18, color: AppColor.primaryDark)),
+        const SizedBox(height: 6),
+        Text('$value', style: AppText.stat(size: 26, color: color)),
+        Text(label, style: AppText.label(), textAlign: TextAlign.center),
+        Text(sub, style: AppText.bodySm()),
+      ]),
+    );
   }
 }
 
-// ── MenuItem model ────────────────────────────────────────────────────────────
-class _MenuItem {
+class _MenuTile extends StatelessWidget {
   final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
   final String label;
-  final Color color;
-  final Color? labelColor;
-  final String? badge;
+  final Widget? badge;
   final Widget? trailing;
   final VoidCallback onTap;
 
-  const _MenuItem({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-    this.labelColor,
-    this.badge,
-    this.trailing,
-  });
+  const _MenuTile({required this.icon, this.iconBg = AppColor.mint, this.iconColor = AppColor.primary, required this.label, this.badge, this.trailing, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(children: [
+          Container(width: 44, height: 44, decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: iconColor)),
+          const SizedBox(width: 14),
+          Expanded(child: Text(label, style: AppText.labelLg().copyWith(fontSize: 16))),
+          if (badge != null) ...[badge!, const SizedBox(width: 8)],
+          trailing ?? const Icon(Icons.chevron_right_rounded, color: AppColor.textMuted),
+        ]),
+      ),
+    );
+  }
 }

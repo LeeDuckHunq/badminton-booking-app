@@ -20,6 +20,19 @@ class ChatApi {
     return [];
   }
 
+  /// Các cuộc trò chuyện của tài khoản đang đăng nhập (mới nhất trước).
+  /// Trả về null nếu lỗi mạng.
+  static Future<List<ChatRoom>?> getMyRooms() async {
+    try {
+      final res = await ApiClient.get('/chat/rooms');
+      if (res.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(res.body);
+        return data.map((e) => ChatRoom.fromJson(e)).where((r) => r.maPhongChat.isNotEmpty).toList();
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// Lấy hoặc tạo phòng chat giữa 2 user — trả về maPhongChat.
   /// Một trong hai username phải là tài khoản đang đăng nhập.
   static Future<String?> getOrCreateRoom({

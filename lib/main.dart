@@ -1,7 +1,9 @@
 import 'package:application/api/api_client.dart';
+import 'package:application/dev/preview.dart';
 import 'package:application/security/AuthManager.dart';
 import 'package:application/ui/screen/home_screen.dart';
 import 'package:application/ui/screen/login_screen.dart';
+import 'package:application/ui/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -31,8 +33,10 @@ void main() async {
   runApp(
     MaterialApp(
       navigatorKey: appNavigatorKey,
+      title: 'SmashZone',
+      theme: AppTheme.light(),
       debugShowCheckedModeBanner: false,
-      home: loggedIn ? HomeScreen() : LoginScreen(),
+      home: previewHome() ?? (loggedIn ? const HomeScreen() : const LoginScreen()),
     ),
   );
 }

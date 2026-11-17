@@ -25,6 +25,9 @@ class InvoiceBookingInfo {
   final DateTime ketThuc;
   final double tongTien;
 
+  /// Đơn giá sân / giờ (để hiển thị chi tiết giá).
+  final double? giaGio;
+
   const InvoiceBookingInfo({
     required this.maPhieuDat,
     required this.tenCumSan,
@@ -33,6 +36,7 @@ class InvoiceBookingInfo {
     required this.batDau,
     required this.ketThuc,
     required this.tongTien,
+    this.giaGio,
   });
 
   double get tongGio => ketThuc.difference(batDau).inMinutes / 60.0;

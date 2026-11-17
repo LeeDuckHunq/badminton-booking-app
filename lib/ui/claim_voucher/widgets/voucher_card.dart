@@ -1,429 +1,121 @@
-import 'package:flutter/material.dart';
+// Thẻ voucher dạng vé (có lỗ khuyết và đường đục lỗ) dùng ở Kho voucher và Voucher của tôi.
 import 'package:application/model/khuyen_mai_model.dart';
 import 'package:application/ui/theme/app_color.dart';
+import 'package:application/ui/theme/app_theme.dart';
+import 'package:application/ui/widget/sz.dart';
+import 'package:flutter/material.dart';
 
-class VoucherCard extends StatefulWidget {
+class VoucherTicket extends StatelessWidget {
   final KhuyenMaiModel voucher;
-  final bool isClaiming;
-  final VoidCallback onClaim;
-  final int index;
+  final Widget action;
+  final bool dimmed;
+  final String? stubLabel;
 
-  const VoucherCard({
-    super.key,
-    required this.voucher,
-    required this.isClaiming,
-    required this.onClaim,
-    required this.index,
-  });
+  const VoucherTicket({super.key, required this.voucher, required this.action, this.dimmed = false, this.stubLabel});
 
-  @override
-  State<VoucherCard> createState() => _VoucherCardState();
-}
+  int get daysLeft => voucher.ngayKetThuc.difference(DateTime.now()).inHours ~/ 24;
 
-class _VoucherCardState extends State<VoucherCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _fadeSlide;
+  bool get expired => voucher.ngayKetThuc.isBefore(DateTime.now());
 
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: Duration(milliseconds: 350 + widget.index * 80),
-    )..forward();
-    _fadeSlide =
-        CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  String _fmt(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-
-  int get _daysLeft =>
-      widget.voucher.ngayKetThuc.difference(DateTime.now()).inDays;
+  bool get expiringSoon => !expired && daysLeft <= 3;
 
   @override
   Widget build(BuildContext context) {
-    final v = widget.voucher;
-    final pct = (v.phanTramGiam * 100).toStringAsFixed(0);
-    final days = _daysLeft;
-    final isUrgent = days <= 3;
+    final percent = (voucher.phanTramGiam * 100).round();
+    final (stubBg, stubFg) = dimmed
+        ? (const Color(0xFFF1F5F9), AppColor.textSubtle)
+        : expiringSoon
+            ? (const Color(0xFFFEE2E2), const Color(0xFFB91C1C))
+            : (const Color(0xFFD7FDDB), AppColor.primaryDark);
 
-    return FadeTransition(
-      opacity: _fadeSlide,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 0.15),
-          end: Offset.zero,
-        ).animate(_fadeSlide),
+    return Opacity(
+      opacity: dimmed ? 0.7 : 1,
+      child: ClipPath(
+        clipper: _TicketClipper(stubWidth: 112),
         child: Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.07),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+          decoration: BoxDecoration(color: Colors.white, boxShadow: AppShadow.card, borderRadius: BorderRadius.circular(AppRadius.lg)),
+          child: IntrinsicHeight(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Container(
+                width: 112,
+                color: stubBg,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Text(stubLabel ?? 'VOUCHER', style: AppText.labelSm(color: stubFg)),
+                  const SizedBox(height: 2),
+                  Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+                    Text('$percent', style: AppText.stat(size: 38, color: stubFg)),
+                    Text('%', style: AppText.headlineMd(color: stubFg)),
+                  ]),
+                  Text('GIẢM GIÁ', style: AppText.labelSm(color: stubFg)),
+                ]),
               ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildBanner(v, pct, days, isUrgent),
-                _DashedDivider(),
-                _buildBottom(v, isUrgent),
-              ],
-            ),
+              CustomPaint(size: const Size(2, double.infinity), painter: _DashPainter()),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 12, 12),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    _statusPill(),
+                    const SizedBox(height: 8),
+                    Text(voucher.tenKhuyenMai.isEmpty ? 'Voucher giảm $percent%' : voucher.tenKhuyenMai, style: AppText.headlineSm(), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Row(children: [
+                      const Icon(Icons.calendar_today_outlined, size: 13, color: AppColor.textMuted),
+                      const SizedBox(width: 4),
+                      Expanded(child: Text('${Fmt.date(voucher.ngayBatDau).substring(0, 5)} – ${Fmt.date(voucher.ngayKetThuc)}', style: AppText.bodySm())),
+                    ]),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(child: Text('Mã: ${voucher.maKhuyenMai}', style: AppText.label(color: AppColor.textMuted), overflow: TextOverflow.ellipsis)),
+                      action,
+                    ]),
+                  ]),
+                ),
+              ),
+            ]),
           ),
         ),
       ),
     );
   }
 
-  // ── Banner ────────────────────────────────────────────────────────────────
-  Widget _buildBanner(
-      KhuyenMaiModel v, String pct, int days, bool isUrgent) {
-    return Stack(
-      children: [
-        SizedBox(
-          height: 130,
-          width: double.infinity,
-          child: Image.network(
-            v.duongDanAnh,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: AppColor.kDeepGreen,
-              child: const Icon(Icons.image_not_supported_rounded,
-                  color: Colors.white38, size: 36),
-            ),
-          ),
-        ),
-        // Gradient overlay
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black.withOpacity(0.45),
-                ],
-                stops: const [0.4, 1.0],
-              ),
-            ),
-          ),
-        ),
-        // Discount badge
-        Positioned(
-          top: 12,
-          left: 12,
-          child: Container(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColor.kAccentYellow,
-              borderRadius: BorderRadius.circular(30),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColor.kAccentYellow.withOpacity(0.5),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.bolt_rounded,
-                    color: AppColor.kDeepGreen, size: 14),
-                const SizedBox(width: 3),
-                Text(
-                  'GIẢM $pct%',
-                  style: const TextStyle(
-                    color: AppColor.kDeepGreen,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        // Urgent badge
-        if (isUrgent)
-          Positioned(
-            top: 12,
-            right: 12,
-            child: Container(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.red[600],
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.local_fire_department_rounded,
-                      color: Colors.white, size: 12),
-                  const SizedBox(width: 3),
-                  Text(
-                    days == 0 ? 'Hôm nay!' : 'Còn $days ngày',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        // Tên voucher
-        Positioned(
-          bottom: 10,
-          left: 12,
-          right: 12,
-          child: Text(
-            v.tenKhuyenMai,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-              fontSize: 16,
-              shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Info + CTA ────────────────────────────────────────────────────────────
-  Widget _buildBottom(KhuyenMaiModel v, bool isUrgent) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _dateRow(Icons.calendar_today_rounded,
-                    'Từ ${_fmt(v.ngayBatDau)}', false),
-                const SizedBox(height: 3),
-                _dateRow(Icons.event_rounded,
-                    'Đến ${_fmt(v.ngayKetThuc)}', isUrgent),
-                const SizedBox(height: 6),
-                Text(
-                  v.maKhuyenMai,
-                  style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                    letterSpacing: 1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          _ClaimButton(
-            isClaiming: widget.isClaiming,
-            onTap: widget.onClaim,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _dateRow(IconData icon, String text, bool urgent) {
-    return Row(
-      children: [
-        Icon(icon,
-            size: 11,
-            color: urgent ? Colors.red[400] : Colors.grey[400]),
-        const SizedBox(width: 5),
-        Text(
-          text,
-          style: TextStyle(
-            color: urgent ? Colors.red[600] : Colors.grey[500],
-            fontSize: 11.5,
-            fontWeight:
-            urgent ? FontWeight.w700 : FontWeight.normal,
-          ),
-        ),
-      ],
-    );
+  Widget _statusPill() {
+    if (expired) return const SzPill('Hết hạn', bg: Color(0xFFF1F5F9), fg: AppColor.textMuted, icon: Icons.history_toggle_off_rounded);
+    if (expiringSoon) return SzPill(daysLeft <= 0 ? 'Hết hạn hôm nay' : 'Sắp hết · còn $daysLeft ngày', bg: const Color(0xFFFEE2E2), fg: const Color(0xFFB91C1C), icon: Icons.alarm_rounded);
+    return SzPill('Còn $daysLeft ngày', bg: const Color(0xFFFFF4B8), fg: AppColor.text, icon: Icons.timer_outlined);
   }
 }
 
-// ── Claim button với pulse animation ─────────────────────────────────────────
-class _ClaimButton extends StatefulWidget {
-  final bool isClaiming;
-  final VoidCallback onTap;
-  const _ClaimButton({required this.isClaiming, required this.onTap});
+/// Khoét 2 nửa hình tròn ở mép trên/dưới, ngay đường nối cuống vé.
+class _TicketClipper extends CustomClipper<Path> {
+  final double stubWidth;
+  _TicketClipper({required this.stubWidth});
 
   @override
-  State<_ClaimButton> createState() => _ClaimButtonState();
-}
-
-class _ClaimButtonState extends State<_ClaimButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulse;
-  late Animation<double> _scale;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
-    _scale = Tween<double>(begin: 1.0, end: 1.05)
-        .animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
+  Path getClip(Size size) {
+    const r = 9.0;
+    final rect = Path()..addRRect(RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(AppRadius.lg)));
+    final holes = Path()
+      ..addOval(Rect.fromCircle(center: Offset(stubWidth + 1, 0), radius: r))
+      ..addOval(Rect.fromCircle(center: Offset(stubWidth + 1, size.height), radius: r));
+    return Path.combine(PathOperation.difference, rect, holes);
   }
 
   @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.isClaiming) {
-      return Container(
-        padding:
-        const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: const SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(
-              strokeWidth: 2.5, color: AppColor.kCourtGreen),
-        ),
-      );
-    }
-
-    return ScaleTransition(
-      scale: _scale,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          padding:
-          const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppColor.kDeepGreen, AppColor.kCourtGreen],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: AppColor.kCourtGreen.withOpacity(0.45),
-                blurRadius: 14,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.local_fire_department_rounded,
-                  color: AppColor.kAccentYellow, size: 16),
-              SizedBox(width: 6),
-              Text(
-                'LẤY\nNGAY',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 12,
-                  height: 1.3,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Dashed divider kiểu ticket ────────────────────────────────────────────────
-class _DashedDivider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 24,
-      child: Row(
-        children: [
-          Container(
-            width: 12,
-            height: 24,
-            decoration: const BoxDecoration(
-              color: Color(0xFFF4F6F4),
-              borderRadius: BorderRadius.only(
-                topRight: Radius.circular(12),
-                bottomRight: Radius.circular(12),
-              ),
-            ),
-          ),
-          Expanded(child: CustomPaint(painter: _DashPainter())),
-          Container(
-            width: 12,
-            height: 24,
-            decoration: const BoxDecoration(
-              color: Color(0xFFF4F6F4),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(12),
-                bottomLeft: Radius.circular(12),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  bool shouldReclip(covariant _TicketClipper oldClipper) => oldClipper.stubWidth != stubWidth;
 }
 
 class _DashPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.grey[200]!
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-
-    const dashW = 8.0, gap = 5.0;
-    double x = 0;
-    final y = size.height / 2;
-    while (x < size.width) {
-      canvas.drawLine(Offset(x, y), Offset(x + dashW, y), paint);
-      x += dashW + gap;
+    final p = Paint()
+      ..color = AppColor.borderStrong
+      ..strokeWidth = 2;
+    for (double y = 12; y < size.height - 12; y += 8) {
+      canvas.drawLine(Offset(1, y), Offset(1, y + 4), p);
     }
   }
 
   @override
-  bool shouldRepaint(_) => false;
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -1,20 +1,19 @@
 // lib/ui/chat/screens/conversation_screen.dart
-
 import 'dart:async';
+
 import 'package:application/api/chat_api.dart';
 import 'package:application/ui/chat/models/chat_models.dart';
 import 'package:application/ui/theme/app_color.dart';
+import 'package:application/ui/theme/app_theme.dart';
+import 'package:application/ui/widget/sz.dart';
 import 'package:flutter/material.dart';
 
+/// M12 – Cuộc trò chuyện 1–1 (làm mới mỗi 3 giây).
 class ConversationScreen extends StatefulWidget {
   final String currentUsername;
   final ChatUser peer;
 
-  const ConversationScreen({
-    super.key,
-    required this.currentUsername,
-    required this.peer,
-  });
+  const ConversationScreen({super.key, required this.currentUsername, required this.peer});
 
   @override
   State<ConversationScreen> createState() => _ConversationScreenState();
@@ -45,40 +44,33 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
 
   Future<void> _initRoom() async {
-    final roomId = await ChatApi.getOrCreateRoom(
-      username1: widget.currentUsername,
-      username2: widget.peer.username,
-    );
+    setState(() => _loadingRoom = true);
+    final roomId = await ChatApi.getOrCreateRoom(username1: widget.currentUsername, username2: widget.peer.username);
     if (!mounted) return;
     setState(() {
       _roomId = roomId;
       _loadingRoom = false;
     });
     if (roomId != null) {
-      await _fetchMessages();
-      // Poll mỗi 3 giây
-      _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-        if (mounted) _fetchMessages(silent: true);
-      });
+      await _fetch();
+      _pollTimer?.cancel();
+      _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _fetch(silent: true));
     }
   }
 
-  Future<void> _fetchMessages({bool silent = false}) async {
-    if (_roomId == null) return;
+  Future<void> _fetch({bool silent = false}) async {
+    if (_roomId == null || !mounted) return;
     final msgs = await ChatApi.getMessages(_roomId!);
     if (!mounted) return;
+    final grew = msgs.length != _messages.where((m) => !m.pending).length;
     setState(() => _messages = msgs);
-    if (!silent) _scrollToBottom();
+    if (!silent || grew) _scrollToBottom();
   }
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollCtrl.hasClients) {
-        _scrollCtrl.animateTo(
-          _scrollCtrl.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+        _scrollCtrl.animateTo(_scrollCtrl.position.maxScrollExtent, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
       }
     });
   }
@@ -86,368 +78,198 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Future<void> _send() async {
     final text = _inputCtrl.text.trim();
     if (text.isEmpty || _roomId == null || _sending) return;
-
     setState(() => _sending = true);
     _inputCtrl.clear();
 
-    // Optimistic UI
     final optimistic = ChatMessage(
       maTinNhan: 'tmp_${DateTime.now().millisecondsSinceEpoch}',
       maPhongChat: _roomId!,
       usernameNguoiGui: widget.currentUsername,
       noiDung: text,
       thoiGianGui: DateTime.now(),
+      pending: true,
     );
     setState(() => _messages = [..._messages, optimistic]);
     _scrollToBottom();
 
-    await ChatApi.sendMessage(
-      maPhongChat: _roomId!,
-      usernameNguoiGui: widget.currentUsername,
-      noiDung: text,
-    );
-
-    await _fetchMessages(silent: true);
-    if (mounted) setState(() => _sending = false);
-    _scrollToBottom();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F4),
-      appBar: _buildAppBar(),
-      body: _loadingRoom
-          ? const Center(
-          child: CircularProgressIndicator(color: AppColor.kCourtGreen))
-          : _roomId == null
-          ? _buildRoomError()
-          : Column(
-        children: [
-          Expanded(child: _buildMessageList()),
-          _buildInputBar(),
-        ],
-      ),
-    );
-  }
-
-  AppBar _buildAppBar() {
-    return AppBar(
-      backgroundColor: AppColor.kDeepGreen,
-      elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new_rounded,
-            color: Colors.white, size: 20),
-        onPressed: () => Navigator.pop(context),
-      ),
-      title: Row(
-        children: [
-          _Avatar(name: widget.peer.fullName, size: 34),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.peer.fullName,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                ),
-              ),
-              Text(
-                '@${widget.peer.username}',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.65),
-                  fontSize: 11,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-          onPressed: () => _fetchMessages(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMessageList() {
-    if (_messages.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.chat_bubble_outline_rounded,
-                color: Colors.grey[300], size: 48),
-            const SizedBox(height: 12),
-            Text('Bắt đầu cuộc trò chuyện nào! 👋',
-                style: TextStyle(color: Colors.grey[400], fontSize: 14)),
-          ],
-        ),
-      );
+    final ok = await ChatApi.sendMessage(maPhongChat: _roomId!, usernameNguoiGui: widget.currentUsername, noiDung: text);
+    if (!mounted) return;
+    if (!ok) {
+      setState(() => _messages = _messages.where((m) => m.maTinNhan != optimistic.maTinNhan).toList());
+      _inputCtrl.text = text;
+      showSzSnack(context, 'Gửi tin nhắn thất bại, thử lại nhé', type: SzToast.error);
     }
+    await _fetch(silent: true);
+    if (mounted) setState(() => _sending = false);
+  }
 
-    return ListView.builder(
-      controller: _scrollCtrl,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      itemCount: _messages.length,
-      itemBuilder: (_, i) {
-        final msg = _messages[i];
-        final isMine = msg.usernameNguoiGui == widget.currentUsername;
-        final showTime = i == 0 ||
-            msg.thoiGianGui
-                .difference(_messages[i - 1].thoiGianGui)
-                .inMinutes >
-                10;
-
-        return Column(
-          children: [
-            if (showTime) _TimeLabel(dt: msg.thoiGianGui),
-            _MessageBubble(msg: msg, isMine: isMine),
-          ],
-        );
-      },
+  @override
+  Widget build(BuildContext context) {
+    final peer = widget.peer;
+    return Scaffold(
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(72),
+        child: Container(
+          color: Colors.white,
+          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+          child: SizedBox(
+            height: 72,
+            child: Row(children: [
+              const SizedBox(width: 4),
+              SzIconButton(Icons.arrow_back_rounded, size: 44, onPressed: () => Navigator.pop(context)),
+              SzAvatar(peer.displayName, size: 46, online: true),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(peer.displayName, style: AppText.headlineSm().copyWith(fontSize: 18), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text('@${peer.username}${peer.isOwner ? ' · Chủ sân' : ''}', style: AppText.bodySm(), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ]),
+              ),
+              const SizedBox(width: 12),
+            ]),
+          ),
+        ),
+      ),
+      body: _loadingRoom
+          ? const SzLoading(message: 'Đang mở cuộc trò chuyện…')
+          : _roomId == null
+              ? SzErrorState(message: 'Không thể tạo phòng chat.', onRetry: _initRoom)
+              : Column(children: [
+                  Expanded(child: _buildMessages()),
+                  _buildInput(),
+                ]),
     );
   }
 
-  Widget _buildInputBar() {
+  Widget _buildMessages() {
+    if (_messages.isEmpty) {
+      return SzEmptyState(icon: Icons.waving_hand_outlined, title: 'Bắt đầu cuộc trò chuyện nào! 👋', message: 'Gửi lời chào tới ${widget.peer.displayName}.');
+    }
+    final items = <Widget>[];
+    DateTime? lastDay;
+    for (var i = 0; i < _messages.length; i++) {
+      final m = _messages[i];
+      final day = DateTime(m.thoiGianGui.year, m.thoiGianGui.month, m.thoiGianGui.day);
+      if (lastDay == null || day != lastDay) {
+        items.add(_DayDivider(day));
+        lastDay = day;
+      }
+      final mine = m.usernameNguoiGui.toLowerCase() == widget.currentUsername.toLowerCase();
+      final next = i + 1 < _messages.length ? _messages[i + 1] : null;
+      final lastInGroup = next == null || next.usernameNguoiGui != m.usernameNguoiGui || next.thoiGianGui.difference(m.thoiGianGui).inMinutes > 5;
+      items.add(_Bubble(message: m, mine: mine, peerName: widget.peer.displayName, showMeta: lastInGroup));
+    }
+    return ListView(controller: _scrollCtrl, padding: const EdgeInsets.fromLTRB(16, 8, 16, 16), children: items);
+  }
+
+  Widget _buildInput() {
     return Container(
-      padding: EdgeInsets.fromLTRB(
-          12, 10, 12, MediaQuery.of(context).padding.bottom + 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF4F6F4),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: TextField(
-                controller: _inputCtrl,
-                maxLines: null,
-                textCapitalization: TextCapitalization.sentences,
-                style: const TextStyle(fontSize: 14),
-                decoration: const InputDecoration(
-                  hintText: 'Nhắn tin...',
-                  hintStyle: TextStyle(color: Colors.grey),
-                  border: InputBorder.none,
-                  contentPadding:
-                  EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                ),
-                onSubmitted: (_) => _send(),
-              ),
+      decoration: const BoxDecoration(color: Colors.white, boxShadow: AppShadow.sticky),
+      padding: EdgeInsets.fromLTRB(12, 10, 12, 10 + MediaQuery.of(context).padding.bottom),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        Expanded(
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48, maxHeight: 120),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(color: AppColor.canvas, borderRadius: BorderRadius.circular(24), border: Border.all(color: AppColor.border)),
+            child: TextField(
+              controller: _inputCtrl,
+              minLines: 1,
+              maxLines: 4,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => _send(),
+              style: AppText.bodyLg(),
+              cursorColor: AppColor.primary,
+              decoration: InputDecoration(border: InputBorder.none, hintText: 'Nhắn tin…', hintStyle: AppText.bodyLg(color: AppColor.textSubtle)),
             ),
           ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: _send,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColor.kDeepGreen, AppColor.kCourtGreen],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColor.kCourtGreen.withOpacity(0.4),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: _sending
-                  ? const Padding(
-                padding: EdgeInsets.all(12),
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white),
-              )
-                  : const Icon(Icons.send_rounded,
-                  color: Colors.white, size: 20),
-            ),
+        ),
+        const SizedBox(width: 8),
+        Material(
+          color: AppColor.primaryDark,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: _sending ? null : _send,
+            child: const SizedBox(width: 48, height: 48, child: Icon(Icons.send_rounded, color: Colors.white, size: 22)),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRoomError() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.error_outline_rounded, color: Colors.grey[300], size: 48),
-          const SizedBox(height: 12),
-          Text('Không thể tạo phòng chat',
-              style: TextStyle(color: Colors.grey[500])),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _initRoom,
-            icon: const Icon(Icons.refresh_rounded, size: 16),
-            label: const Text('Thử lại'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColor.kCourtGreen,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              elevation: 0,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 }
 
-// ── Message bubble ────────────────────────────────────────────────────────────
-class _MessageBubble extends StatelessWidget {
-  final ChatMessage msg;
-  final bool isMine;
-  const _MessageBubble({required this.msg, required this.isMine});
+class _DayDivider extends StatelessWidget {
+  final DateTime day;
+  const _DayDivider(this.day);
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 6),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.72,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          gradient: isMine
-              ? const LinearGradient(
-            colors: [AppColor.kDeepGreen, AppColor.kCourtGreen],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          )
-              : null,
-          color: isMine ? null : Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isMine ? 18 : 4),
-            bottomRight: Radius.circular(isMine ? 4 : 18),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Text(
-          msg.noiDung,
-          style: TextStyle(
-            color: isMine ? Colors.white : AppColor.kTextDark,
-            fontSize: 14,
-            height: 1.4,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Time label ────────────────────────────────────────────────────────────────
-class _TimeLabel extends StatelessWidget {
-  final DateTime dt;
-  const _TimeLabel({required this.dt});
-
-  String _format() {
     final now = DateTime.now();
-    final diff = now.difference(dt);
-    final time =
-        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    if (diff.inDays == 0) return time;
-    if (diff.inDays == 1) return 'Hôm qua $time';
-    return '${dt.day}/${dt.month} $time';
-  }
-
-  @override
-  Widget build(BuildContext context) {
+    final today = DateTime(now.year, now.month, now.day);
+    final diff = today.difference(day).inDays;
+    final label = diff == 0 ? 'Hôm nay, ${Fmt.date(day)}' : (diff == 1 ? 'Hôm qua, ${Fmt.date(day)}' : Fmt.dateLong(day));
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.grey[200],
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            _format(),
-            style: TextStyle(color: Colors.grey[500], fontSize: 11),
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(color: const Color(0xFFD1F8D5), borderRadius: BorderRadius.circular(999)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.calendar_today_rounded, size: 13, color: AppColor.primaryDark),
+            const SizedBox(width: 6),
+            Text(label, style: AppText.label(color: AppColor.primaryDark)),
+          ]),
         ),
       ),
     );
   }
 }
 
-// ── Avatar widget ─────────────────────────────────────────────────────────────
-class _Avatar extends StatelessWidget {
-  final String name;
-  final double size;
-  const _Avatar({required this.name, required this.size});
+class _Bubble extends StatelessWidget {
+  final ChatMessage message;
+  final bool mine;
+  final String peerName;
+  final bool showMeta;
 
-  String get _initials {
-    final parts = name.trim().split(' ');
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return (parts.first[0] + parts.last[0]).toUpperCase();
-  }
-
-  Color get _color {
-    final colors = [
-      const Color(0xFF1A7A3C),
-      const Color(0xFF1565C0),
-      const Color(0xFF7B1FA2),
-      const Color(0xFFE64A19),
-      const Color(0xFF00838F),
-    ];
-    return colors[name.hashCode.abs() % colors.length];
-  }
+  const _Bubble({required this.message, required this.mine, required this.peerName, required this.showMeta});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
+    final bubble = Container(
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: _color,
-        shape: BoxShape.circle,
-      ),
-      child: Center(
-        child: Text(
-          _initials,
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-            fontSize: size * 0.36,
-          ),
+        color: mine ? AppColor.primaryDark : const Color(0xFFE6F5EC),
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(18),
+          topRight: const Radius.circular(18),
+          bottomLeft: Radius.circular(mine ? 18 : (showMeta ? 4 : 18)),
+          bottomRight: Radius.circular(mine ? (showMeta ? 4 : 18) : 18),
         ),
       ),
+      child: Text(message.noiDung, style: AppText.bodyLg(color: mine ? Colors.white : AppColor.text)),
+    );
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: showMeta ? 10 : 3),
+      child: Column(crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start, children: [
+        Row(mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start, crossAxisAlignment: CrossAxisAlignment.end, children: [
+          if (!mine) ...[showMeta ? SzAvatar.soft(peerName, size: 30) : const SizedBox(width: 30), const SizedBox(width: 8)],
+          Flexible(child: bubble),
+        ]),
+        if (showMeta)
+          Padding(
+            padding: EdgeInsets.only(top: 4, left: mine ? 0 : 38),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(Fmt.hhmm(message.thoiGianGui), style: AppText.labelSm()),
+              if (mine) ...[
+                const SizedBox(width: 4),
+                Icon(message.pending ? Icons.schedule_rounded : Icons.done_all_rounded, size: 14, color: message.pending ? AppColor.textSubtle : AppColor.primary),
+              ],
+            ]),
+          ),
+      ]),
     );
   }
 }

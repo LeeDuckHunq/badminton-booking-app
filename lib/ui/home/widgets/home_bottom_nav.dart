@@ -1,145 +1,56 @@
 // lib/ui/home/widgets/home_bottom_nav.dart
-
-import 'package:flutter/material.dart';
 import 'package:application/ui/theme/app_color.dart';
+import 'package:application/ui/theme/app_theme.dart';
+import 'package:flutter/material.dart';
 
 enum HomeNavTab { home, chat, explore, highlight, account }
 
+/// Thanh tab dưới 5 mục.
 class HomeBottomNav extends StatelessWidget {
   final HomeNavTab currentTab;
   final ValueChanged<HomeNavTab> onTabChanged;
 
-  const HomeBottomNav({
-    super.key,
-    required this.currentTab,
-    required this.onTabChanged,
-  });
+  const HomeBottomNav({super.key, required this.currentTab, required this.onTabChanged});
 
   static const _tabs = [
-    _NavItem(tab: HomeNavTab.home,      icon: Icons.home_rounded,        label: 'Trang chủ'),
-    _NavItem(tab: HomeNavTab.chat,      icon: Icons.chat_bubble_outline_rounded,     label: 'Tin nhắn'),
-    _NavItem(tab: HomeNavTab.explore,   icon: Icons.article_outlined,    label: 'Khám phá',  isCentral: true),
-    _NavItem(tab: HomeNavTab.highlight, icon: Icons.local_fire_department_outlined, label: 'Nổi bật'),
-    _NavItem(tab: HomeNavTab.account,   icon: Icons.person_outline_rounded, label: 'Tài khoản'),
+    (HomeNavTab.home, Icons.home_outlined, Icons.home_rounded, 'Trang chủ'),
+    (HomeNavTab.chat, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Tin nhắn'),
+    (HomeNavTab.explore, Icons.confirmation_number_outlined, Icons.confirmation_number_rounded, 'Khám phá'),
+    (HomeNavTab.highlight, Icons.emoji_events_outlined, Icons.emoji_events_rounded, 'Nổi bật'),
+    (HomeNavTab.account, Icons.person_outline_rounded, Icons.person_rounded, 'Tài khoản'),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 72,
-      decoration: BoxDecoration(
-        color: AppColor.kLineWhite,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: _tabs.map((item) {
-          final isActive = currentTab == item.tab;
-
-          if (item.isCentral) {
-            // Explore — floating center button
-            return Expanded(
-              child: GestureDetector(
-                onTap: () => onTabChanged(item.tab),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isActive
-                            ? AppColor.kCourtGreen
-                            : AppColor.kLineWhite,
-                        border: Border.all(
-                          color: AppColor.kCourtGreen,
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColor.kCourtGreen.withOpacity(0.30),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          )
-                        ],
-                      ),
-                      child: Icon(
-                        item.icon,
-                        color: isActive
-                            ? AppColor.kLineWhite
-                            : AppColor.kCourtGreen,
-                        size: 26,
-                      ),
+      decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Color(0x0F0D2E18), blurRadius: 16, spreadRadius: -2, offset: Offset(0, -4))]),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 64,
+          child: Row(children: [
+            for (final (tab, icon, activeIcon, label) in _tabs)
+              Expanded(
+                child: InkWell(
+                  onTap: () => onTabChanged(tab),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+                      decoration: BoxDecoration(color: tab == currentTab ? AppColor.mint : Colors.transparent, borderRadius: BorderRadius.circular(999)),
+                      child: Icon(tab == currentTab ? activeIcon : icon, size: 24, color: tab == currentTab ? AppColor.primary : AppColor.textMuted),
                     ),
-                  ],
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      style: (tab == currentTab ? AppText.label(color: AppColor.primary) : AppText.label(color: AppColor.textMuted)).copyWith(fontSize: 11, fontWeight: tab == currentTab ? FontWeight.w700 : FontWeight.w500),
+                    ),
+                  ]),
                 ),
               ),
-            );
-          }
-
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onTabChanged(item.tab),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? AppColor.kCourtGreen.withOpacity(0.10)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      item.icon,
-                      color: isActive
-                          ? AppColor.kCourtGreen
-                          : Colors.grey[500],
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 200),
-                    style: TextStyle(
-                      color: isActive
-                          ? AppColor.kCourtGreen
-                          : Colors.grey[500]!,
-                      fontSize: 10.5,
-                      fontWeight: isActive
-                          ? FontWeight.w700
-                          : FontWeight.w400,
-                    ),
-                    child: Text(item.label),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
+          ]),
+        ),
       ),
     );
   }
-}
-
-class _NavItem {
-  final HomeNavTab tab;
-  final IconData icon;
-  final String label;
-  final bool isCentral;
-
-  const _NavItem({
-    required this.tab,
-    required this.icon,
-    required this.label,
-    this.isCentral = false,
-  });
 }

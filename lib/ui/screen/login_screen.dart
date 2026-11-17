@@ -3,864 +3,305 @@ import 'package:application/api/san_api.dart';
 import 'package:application/ui/screen/home_screen.dart';
 import 'package:application/ui/screen/register_screen.dart';
 import 'package:application/ui/theme/app_color.dart';
-import 'package:application/ui/widget/app_button.dart';
+import 'package:application/ui/theme/app_theme.dart';
+import 'package:application/ui/widget/sz.dart';
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
-
 import 'package:shared_preferences/shared_preferences.dart';
 
-class LoginScreen extends StatelessWidget {
+/// M1 – Đăng nhập.
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return BadmintonLoginScreen();
-  }
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
-class BadmintonLoginScreen extends StatefulWidget {
-  const BadmintonLoginScreen({super.key});
-  @override
-  State<BadmintonLoginScreen> createState() => _BadmintonLoginScreenState();
-}
-
-class _BadmintonLoginScreenState extends State<BadmintonLoginScreen>
-    with TickerProviderStateMixin {
-
-  final _usernameCtrl    = TextEditingController();
+class _LoginScreenState extends State<LoginScreen> {
+  final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  bool _obscure   = true;
-  bool _remember  = false;
+  bool _remember = true;
+  bool _loading = false;
+  String? _error;
 
-  // Shuttlecock arc animation
-  late AnimationController _shuttleCtrl;
-  late Animation<double>   _shuttleArc;   // 0→1 arc progress
-  late Animation<double>   _shuttleAngle; // rotation
-
-  // Fade-in entrance
-  late AnimationController _fadeCtrl;
-  late Animation<double>   _fadeAnim;
-  late Animation<Offset>   _slideAnim;
-
-  // Court line pulse
-  late AnimationController _pulseCtrl;
-  late Animation<double>   _pulseAnim;
-
-  //Amount
-  int amountOfUser = 0;
-  int amountOfCourt = 0;
-
-  Future<void> _loadData() async {
-    amountOfUser = await AccountApi.amountOfAccount();
-    amountOfCourt = await SanApi.amountOfCourt();
-    setState(() {});
-  }
+  int? _userCount;
+  int? _courtCount;
 
   @override
   void initState() {
     super.initState();
-
-    _loadData();
-
-    // Shuttlecock arc: loops
-    _shuttleCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat();
-
-    _shuttleArc = CurvedAnimation(
-      parent: _shuttleCtrl,
-      curve: Curves.easeInOut,
-    );
-    _shuttleAngle = Tween<double>(begin: -0.8, end: 0.8).animate(
-      CurvedAnimation(parent: _shuttleCtrl, curve: Curves.easeInOut),
-    );
-
-    // Entrance fade+slide
-    _fadeCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
-    _fadeAnim  = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
-    _slideAnim = Tween<Offset>(
-      begin: const Offset(0, 0.10),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOutCubic));
-    _fadeCtrl.forward();
-
-    // Subtle pulse on court lines
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-    _pulseAnim = Tween<double>(begin: 0.5, end: 0.85).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
-    );
+    _loadStats();
   }
 
   @override
   void dispose() {
-    _shuttleCtrl.dispose();
-    _fadeCtrl.dispose();
-    _pulseCtrl.dispose();
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
   }
 
+  Future<void> _loadStats() async {
+    final results = await Future.wait([AccountApi.amountOfAccount(), SanApi.amountOfCourt()]);
+    if (!mounted) return;
+    setState(() {
+      _userCount = results[0];
+      _courtCount = results[1];
+    });
+  }
+
   Future<void> _login() async {
-    var result = await AccountApi.login(
-      _usernameCtrl.text,
-      _passwordCtrl.text,
-    );
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result
-              ? '🏸 Smash thành công! Vào sân thôi!'
-              : "Đăng nhập không thành công.",
-        ),
-        backgroundColor: result
-            ? AppColor.kCourtGreen
-            : AppColor.kAccentYellow,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-    );
-
-    if (result) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(
-        'remember_login',
-        _remember,
-      );
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => HomeScreen(),
-        ),
-      );
+    final username = _usernameCtrl.text.trim();
+    final password = _passwordCtrl.text;
+    if (username.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Vui lòng nhập tên đăng nhập và mật khẩu');
+      return;
     }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    bool ok = false;
+    try {
+      ok = await AccountApi.login(username, password);
+    } catch (_) {
+      ok = false;
+    }
+    if (!mounted) return;
+
+    if (!ok) {
+      setState(() {
+        _loading = false;
+        _error = 'Sai tên đăng nhập hoặc mật khẩu';
+      });
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('remember_login', _remember);
+    if (!mounted) return;
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => HomeScreen()));
+  }
+
+  Future<void> _openRegister() async {
+    final registered = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => const RegisterScreen()));
+    if (!mounted) return;
+    if (registered == true) {
+      showSzSnack(context, 'Đăng ký thành công! Hãy đăng nhập để vào sân.');
+    }
+    _loadStats();
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-
     return Scaffold(
-      body: Stack(
-        children: [
-          // ── Background court ──────────────────────────────────────
-          _CourtBackground(pulseAnim: _pulseAnim, size: size),
-
-          // ── Animated shuttlecock arc ───────────────────────────────
-          AnimatedBuilder(
-            animation: _shuttleCtrl,
-            builder: (context, _) {
-              // Parabolic arc across top half
-              final t = _shuttleCtrl.value;
-              final x = size.width * 0.1 + (size.width * 0.8) * t;
-              final y = size.height * 0.05 +
-                  (size.height * 0.22) * (4 * t * (1 - t)); // arc peak
-              return Positioned(
-                left: x - 18,
-                top: y - 18,
-                child: Transform.rotate(
-                  angle: _shuttleAngle.value,
-                  child: const _ShuttlecockIcon(size: 36),
-                ),
-              );
-            },
-          ),
-
-          // ── Racket decoration top-left ─────────────────────────────
-          Positioned(
-            top: -10,
-            left: -20,
-            child: Transform.rotate(
-              angle: 0.7,
-              child: Opacity(
-                opacity: 0.18,
-                child: _RacketPainter(width: 90, height: 160),
-              ),
-            ),
-          ),
-
-          // ── Racket decoration bottom-right ─────────────────────────
-          Positioned(
-            bottom: -20,
-            right: -15,
-            child: Transform.rotate(
-              angle: -0.5,
-              child: Opacity(
-                opacity: 0.14,
-                child: _RacketPainter(width: 80, height: 145),
-              ),
-            ),
-          ),
-
-          // ── Main scrollable content ───────────────────────────────
-          SafeArea(
-            child: FadeTransition(
-              opacity: _fadeAnim,
-              child: SlideTransition(
-                position: _slideAnim,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 48),
-                      _buildHeader(),
-                      const SizedBox(height: 36),
-                      _buildCard(),
-                      const SizedBox(height: 28),
-                      /*
-                      _buildSocial(),
-                      const SizedBox(height: 32),
-
-                       */
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Header: logo + title ────────────────────────────────────────────────────
-  Widget _buildHeader() {
-    return Column(
-      children: [
-        // Logo badge
-        Container(
-          width: 84,
-          height: 84,
-          decoration: BoxDecoration(
-            color: AppColor.kAccentYellow,
-            borderRadius: BorderRadius.circular(26),
-            boxShadow: [
-              BoxShadow(
-                color: AppColor.kAccentYellow.withOpacity(0.55),
-                blurRadius: 24,
-                offset: const Offset(0, 10),
-              ),
-              BoxShadow(
-                color: AppColor.kDeepGreen.withOpacity(0.30),
-                blurRadius: 40,
-                offset: const Offset(0, 16),
-              ),
-            ],
-          ),
-          child: Center(
-            child: CustomPaint(
-              size: const Size(52, 52),
-              painter: _LogoRacketPainter(),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'SmashZone',
-          style: TextStyle(
-            color: AppColor.kLineWhite,
-            fontSize: 30,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 2.0,
-            shadows: [
-              Shadow(color: AppColor.kDeepGreen, blurRadius: 12, offset: Offset(0, 4)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColor.kAccentYellow.withOpacity(0.18),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColor.kAccentYellow.withOpacity(0.5), width: 1),
-          ),
-          child: const Text(
-            '🏸  Ứng dụng cầu lông của bạn',
-            style: TextStyle(
-              color: AppColor.kLineWhite,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.4,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── White card ──────────────────────────────────────────────────────────────
-  Widget _buildCard() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(26, 28, 26, 24),
-      decoration: BoxDecoration(
-        color: AppColor.kCardWhite,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: AppColor.kDeepGreen.withOpacity(0.22),
-            blurRadius: 40,
-            offset: const Offset(0, 20),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildField(
-            controller: _usernameCtrl,
-            label: 'Email',
-            hint: 'vd: player@smash.vn',
-            icon: Icons.alternate_email_rounded,
-            type: TextInputType.emailAddress,
-          ),
-
-          const SizedBox(height: 14),
-
-          _buildField(
-            controller: _passwordCtrl,
-            label: 'Mật khẩu',
-            hint: '••••••••',
-            icon: Icons.lock_outline_rounded,
-            obscure: _obscure,
-            suffix: IconButton(
-              icon: Icon(
-                _obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                color: Colors.grey[400],
-                size: 20,
-              ),
-              onPressed: () => setState(() => _obscure = !_obscure),
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          Row(
-            children: [
-              _CourtCheckbox(
-                value: _remember,
-                onChanged: (v) => setState(() => _remember = v),
-              ),
-              const SizedBox(width: 8),
-              Text('Ghi nhớ đăng nhập',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-              const Spacer(),
-            ],
-          ),
-
-          const SizedBox(height: 24),
-
-          // Login button
-          AppButton(btnText: "Vào Sân", isLoading: false, onTap: _login),
-
-          const SizedBox(height: 18),
-
-          // Score-style stats bar (decorative)
-          _buildScoreBar(),
-
-          const SizedBox(height: 16),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('Chưa có tài khoản? ',
-                  style: TextStyle(color: Colors.grey[500], fontSize: 13.5)),
-              GestureDetector(
-                onTap: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => RegisterScreen())
-                  );
-
-                  if (result == true) {
-                    await _loadData();
-                  }
-                },
-                child: const Text(
-                  'Đăng ký ngay',
-                  style: TextStyle(
-                    color: AppColor.kCourtGreen,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13.5,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-    TextInputType? type,
-    bool obscure = false,
-    Widget? suffix,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(
-                color: AppColor.kTextDark, fontSize: 12.5, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          keyboardType: type,
-          obscureText: obscure,
-          style: const TextStyle(fontSize: 15, color: AppColor.kTextDark),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
-            prefixIcon: Icon(icon, color: AppColor.kCourtGreen, size: 20),
-            suffixIcon: suffix,
-            filled: true,
-            fillColor: AppColor.kMintField,
-            contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppColor.kCourtGreen, width: 1.8),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: Colors.green[100]!, width: 1),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Decorative scoreboard-style mini widget
-  Widget _buildScoreBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColor.kMintField,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green[200]!, width: 1),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _statItem('$amountOfUser', 'Thành viên'),
-          Container(width: 1, height: 28, color: Colors.green[200]),
-          _statItem('$amountOfCourt+', 'Sân đấu'),
-          Container(width: 1, height: 28, color: Colors.green[200]),
-          _statItem('24/7', 'Hỗ trợ'),
-        ],
-      ),
-    );
-  }
-
-  Widget _statItem(String value, String label) {
-    return Column(
-      children: [
-        Text(value,
-            style: const TextStyle(
-                color: AppColor.kCourtGreen,
-                fontWeight: FontWeight.w900,
-                fontSize: 14)),
-        Text(label,
-            style: TextStyle(color: Colors.grey[500], fontSize: 10.5)),
-      ],
-    );
-  }
-
-  // ── Social login ────────────────────────────────────────────────────────────
-  Widget _buildSocial() {
-    return Column(
-      children: [
-        Row(
+      backgroundColor: const Color(0xFFEAFFEA),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
-            Expanded(
-                child: Divider(color: AppColor.kLineWhite.withOpacity(0.35))),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 14),
-              child: Text('hoặc',
-                  style: TextStyle(color: AppColor.kLineWhite, fontSize: 13)),
+            const AuthHero(title: 'Sẵn sàng ra sân?'),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(child: _StatCard(label: 'Cộng đồng', value: _userCount, unit: 'vợt thủ', icon: Icons.groups_rounded)),
+              const SizedBox(width: 12),
+              Expanded(child: _StatCard(label: 'Sân trên hệ thống', value: _courtCount, unit: 'sân', icon: Icons.stadium_rounded, highlight: true)),
+            ]),
+            const SizedBox(height: 16),
+            SzCard(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
+              radius: 20,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Đăng nhập tài khoản', style: AppText.headlineMd()),
+                      const SizedBox(height: 4),
+                      Text('Vào sân và theo dõi lịch đặt của bạn', style: AppText.body(color: AppColor.textMuted)),
+                    ]),
+                  ),
+                  Container(width: 40, height: 40, decoration: const BoxDecoration(color: AppColor.mint, shape: BoxShape.circle), child: const Icon(Icons.verified_user_outlined, color: AppColor.primary, size: 22)),
+                ]),
+                const SizedBox(height: 24),
+                SzTextField(
+                  controller: _usernameCtrl,
+                  label: 'Tên đăng nhập',
+                  labelHint: 'Bắt buộc',
+                  hint: 'Nhập tên đăng nhập',
+                  icon: Icons.person_outline_rounded,
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) => _error == null ? null : setState(() => _error = null),
+                ),
+                const SizedBox(height: 18),
+                SzTextField(
+                  controller: _passwordCtrl,
+                  label: 'Mật khẩu',
+                  labelHint: 'Tối thiểu 6 ký tự',
+                  hint: '••••••••',
+                  icon: Icons.lock_outline_rounded,
+                  password: true,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _login(),
+                  onChanged: (_) => _error == null ? null : setState(() => _error = null),
+                ),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: () => setState(() => _remember = !_remember),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Row(children: [
+                    Checkbox(value: _remember, onChanged: (v) => setState(() => _remember = v ?? false), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact),
+                    Text('Ghi nhớ đăng nhập', style: AppText.body()),
+                  ]),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  _ErrorBanner(_error!),
+                ],
+                const SizedBox(height: 18),
+                SzButton('Vào Sân', expand: true, height: 56, loading: _loading, trailingIcon: Icons.sports_score_rounded, kind: SzButtonKind.dark, onPressed: _login),
+              ]),
             ),
-            Expanded(
-                child: Divider(color: AppColor.kLineWhite.withOpacity(0.35))),
+            const SizedBox(height: 24),
+            AuthFooterLink(text: 'Chưa có tài khoản?', action: 'Đăng ký', onTap: _openRegister),
           ],
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(child: _socialBtn('Google', Icons.g_mobiledata_rounded)),
-            const SizedBox(width: 12),
-            Expanded(child: _socialBtn('Facebook', Icons.facebook_rounded)),
-          ],
-        ),
-      ],
+      ),
     );
   }
+}
 
-  Widget _socialBtn(String label, IconData icon) {
+/// Khối thương hiệu ở đầu màn Đăng nhập / Đăng ký.
+class AuthHero extends StatelessWidget {
+  final String title;
+  const AuthHero({super.key, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      height: 48,
-      decoration: BoxDecoration(
-        color: AppColor.kLineWhite.withOpacity(0.13),
-        borderRadius: BorderRadius.circular(14),
-        border:
-        Border.all(color: AppColor.kLineWhite.withOpacity(0.35), width: 1),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () {},
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: AppColor.kLineWhite, size: 22),
-              const SizedBox(width: 8),
-              Text(label,
-                  style: const TextStyle(
-                      color: AppColor.kLineWhite,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14)),
-            ],
-          ),
+      height: 168,
+      decoration: BoxDecoration(color: const Color(0xFFD1F8D5), borderRadius: BorderRadius.circular(24), boxShadow: AppShadow.card),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(children: [
+        Positioned(right: -24, top: 18, bottom: -30, width: 180, child: CustomPaint(painter: _CourtLinesPainter())),
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(999)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppColor.primaryDark, shape: BoxShape.circle)),
+                const SizedBox(width: 6),
+                Text('ĐẶT SÂN CẦU LÔNG', style: AppText.labelSm(color: AppColor.primaryDark)),
+              ]),
+            ),
+            const Spacer(),
+            Row(children: [
+              Stack(clipBehavior: Clip.none, children: [
+                const SzLogo(size: 64),
+                Positioned(top: -4, right: -4, child: Container(width: 16, height: 16, decoration: BoxDecoration(color: AppColor.accent, shape: BoxShape.circle, border: Border.all(color: const Color(0xFFD1F8D5), width: 3)))),
+              ]),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('SmashZone', style: AppText.display(color: AppColor.primary).copyWith(fontSize: 28, height: 1.1)),
+                  Text(title, style: AppText.headlineLg(color: AppColor.text)),
+                ]),
+              ),
+            ]),
+          ]),
         ),
-      ),
+      ]),
     );
   }
 }
 
-//region design
-// ─── Court Background Painter ─────────────────────────────────────────────────
-class _CourtBackground extends StatelessWidget {
-  final Animation<double> pulseAnim;
-  final Size size;
-  const _CourtBackground({required this.pulseAnim, required this.size});
+class _CourtLinesPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = const Color(0xFFB4E8BC)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+    final r = RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, size.width, size.height), const Radius.circular(10));
+    canvas.drawRRect(r, p);
+    canvas.drawLine(Offset(0, size.height * 0.42), Offset(size.width, size.height * 0.42), p);
+    canvas.drawLine(Offset(size.width * 0.5, size.height * 0.42), Offset(size.width * 0.5, size.height), p);
+    canvas.drawLine(Offset(size.width * 0.15, 0), Offset(size.width * 0.15, size.height), p);
+    canvas.drawLine(Offset(size.width * 0.85, 0), Offset(size.width * 0.85, size.height), p);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _StatCard extends StatelessWidget {
+  final String label;
+  final int? value;
+  final String unit;
+  final IconData icon;
+  final bool highlight;
+
+  const _StatCard({required this.label, required this.value, required this.unit, required this.icon, this.highlight = false});
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: pulseAnim,
-      builder: (context, _) {
-        return CustomPaint(
-          size: size,
-          painter: _CourtPainter(lineOpacity: pulseAnim.value),
-        );
-      },
-    );
-  }
-}
-
-class _CourtPainter extends CustomPainter {
-  final double lineOpacity;
-  _CourtPainter({required this.lineOpacity});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Background gradient
-    final bgPaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [AppColor.kDeepGreen, AppColor.kCourtGreen, Color(0xFF1F8F42)],
-        stops: [0.0, 0.5, 1.0],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-    canvas.drawRect(
-        Rect.fromLTWH(0, 0, size.width, size.height), bgPaint);
-
-    final linePaint = Paint()
-      ..color = AppColor.kLineWhite.withOpacity(lineOpacity)
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-
-    final thinLine = Paint()
-      ..color = AppColor.kLineWhite.withOpacity(lineOpacity * 0.45)
-      ..strokeWidth = 0.8
-      ..style = PaintingStyle.stroke;
-
-    final double cw = size.width;
-    final double ch = size.height;
-
-    // Court boundary (outer)
-    final double marginH = cw * 0.06;
-    final double marginV = ch * 0.28;
-    final Rect court =
-    Rect.fromLTRB(marginH, marginV, cw - marginH, ch - 0.04 * ch);
-    canvas.drawRect(court, linePaint);
-
-    // Net line (horizontal center)
-    final double netY = marginV + (ch - 0.04 * ch - marginV) / 2;
-    canvas.drawLine(Offset(marginH, netY), Offset(cw - marginH, netY), linePaint);
-
-    // Short services lines
-    final double ssTop = marginV + (netY - marginV) * 0.35;
-    final double ssBot = netY + (ch - 0.04 * ch - netY) * 0.35;
-    canvas.drawLine(Offset(marginH, ssTop), Offset(cw - marginH, ssTop), thinLine);
-    canvas.drawLine(Offset(marginH, ssBot), Offset(cw - marginH, ssBot), thinLine);
-
-    // Center lines (vertical)
-    final double cx = cw / 2;
-    canvas.drawLine(Offset(cx, marginV), Offset(cx, netY), thinLine);
-    canvas.drawLine(Offset(cx, netY), Offset(cx, ch - 0.04 * ch), thinLine);
-
-    // Side tram lines (doubles)
-    final double tramLeft  = marginH + cw * 0.08;
-    final double tramRight = cw - marginH - cw * 0.08;
-    canvas.drawLine(Offset(tramLeft, marginV), Offset(tramLeft, ch - 0.04 * ch), thinLine);
-    canvas.drawLine(Offset(tramRight, marginV), Offset(tramRight, ch - 0.04 * ch), thinLine);
-
-    // Net posts circles
-    final postPaint = Paint()
-      ..color = AppColor.kAccentYellow.withOpacity(0.6)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(marginH, netY), 5, postPaint);
-    canvas.drawCircle(Offset(cw - marginH, netY), 5, postPaint);
-
-    // Subtle vignette
-    final vignette = Paint()
-      ..shader = RadialGradient(
-        center: Alignment.center,
-        radius: 1.0,
-        colors: [
-          Colors.transparent,
-          AppColor.kDeepGreen.withOpacity(0.55),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, cw, ch));
-    canvas.drawRect(Rect.fromLTWH(0, 0, cw, ch), vignette);
-  }
-
-  @override
-  bool shouldRepaint(_CourtPainter old) => old.lineOpacity != lineOpacity;
-}
-
-// ─── Shuttlecock Icon (drawn with CustomPaint) ────────────────────────────────
-class _ShuttlecockIcon extends StatelessWidget {
-  final double size;
-  const _ShuttlecockIcon({required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size(size, size),
-      painter: _ShuttlePainter(),
-    );
-  }
-}
-
-class _ShuttlePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double w = size.width;
-    final double h = size.height;
-
-    // Cork (bottom)
-    final corkPaint = Paint()..color = const Color(0xFFEDC97A);
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(w * 0.5, h * 0.78), width: w * 0.32, height: h * 0.22),
-      corkPaint,
-    );
-
-    // Feathers (fan shape from cork top)
-    final featherPaint = Paint()
-      ..color = AppColor.kShuttleWhite.withOpacity(0.92)
-      ..strokeWidth = w * 0.07
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final Offset base = Offset(w * 0.5, h * 0.68);
-    for (int i = 0; i < 7; i++) {
-      final double angle = -math.pi / 2 + (i - 3) * (math.pi / 9);
-      final Offset tip = Offset(
-        base.dx + math.cos(angle) * h * 0.52,
-        base.dy + math.sin(angle) * h * 0.52,
-      );
-      canvas.drawLine(base, tip, featherPaint);
-    }
-
-    // Feather rim arc
-    final rimPaint = Paint()
-      ..color = AppColor.kShuttleWhite.withOpacity(0.55)
-      ..strokeWidth = w * 0.05
-      ..style = PaintingStyle.stroke;
-    canvas.drawArc(
-      Rect.fromCenter(center: base, width: h * 1.05, height: h * 1.05),
-      -math.pi * 1.05,
-      math.pi * 0.1,
-      false,
-      rimPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_ShuttlePainter _) => false;
-}
-
-// ─── Racket Widget (decorative) ───────────────────────────────────────────────
-class _RacketPainter extends StatelessWidget {
-  final double width;
-  final double height;
-  const _RacketPainter({required this.width, required this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size(width, height),
-      painter: _RacketCustomPainter(),
-    );
-  }
-}
-
-class _RacketCustomPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double w = size.width;
-    final double h = size.height;
-
-    final framePaint = Paint()
-      ..color = AppColor.kLineWhite
-      ..strokeWidth = w * 0.08
-      ..style = PaintingStyle.stroke;
-
-    final stringPaint = Paint()
-      ..color = AppColor.kLineWhite.withOpacity(0.6)
-      ..strokeWidth = w * 0.025
-      ..style = PaintingStyle.stroke;
-
-    // Head oval
-    final Rect head = Rect.fromLTRB(w * 0.05, h * 0.02, w * 0.95, h * 0.55);
-    canvas.drawOval(head, framePaint);
-
-    // Handle
-    canvas.drawLine(
-      Offset(w * 0.38, h * 0.52),
-      Offset(w * 0.38, h * 0.96),
-      framePaint,
-    );
-    canvas.drawLine(
-      Offset(w * 0.62, h * 0.52),
-      Offset(w * 0.62, h * 0.96),
-      framePaint,
-    );
-    canvas.drawLine(
-      Offset(w * 0.38, h * 0.96),
-      Offset(w * 0.62, h * 0.96),
-      framePaint,
-    );
-
-    // Strings (vertical)
-    for (int i = 1; i <= 5; i++) {
-      final double x = head.left + (head.width / 6) * i;
-      // Clip to oval roughly
-      final double dy = head.height / 2 *
-          math.sqrt(
-              math.max(0, 1 - math.pow((x - head.center.dx) / (head.width / 2), 2).toDouble()));
-      canvas.drawLine(
-        Offset(x, head.center.dy - dy + 2),
-        Offset(x, head.center.dy + dy - 2),
-        stringPaint,
-      );
-    }
-
-    // Strings (horizontal)
-    for (int i = 1; i <= 6; i++) {
-      final double y = head.top + (head.height / 7) * i;
-      final double dx = head.width / 2 *
-          math.sqrt(
-              math.max(0, 1 - math.pow((y - head.center.dy) / (head.height / 2), 2).toDouble()));
-      canvas.drawLine(
-        Offset(head.center.dx - dx + 2, y),
-        Offset(head.center.dx + dx - 2, y),
-        stringPaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_RacketCustomPainter _) => false;
-}
-
-// ─── Logo racket (for the badge) ──────────────────────────────────────────────
-class _LogoRacketPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double w = size.width;
-    final double h = size.height;
-
-    final paint = Paint()
-      ..color = AppColor.kDeepGreen
-      ..strokeWidth = w * 0.10
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    // Simple racket silhouette
-    canvas.drawOval(
-      Rect.fromLTRB(w * 0.08, h * 0.04, w * 0.92, h * 0.58),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(w * 0.5, h * 0.56),
-      Offset(w * 0.5, h * 0.96),
-      paint,
-    );
-
-    // Shuttle dot
-    final dot = Paint()
-      ..color = AppColor.kCourtGreen
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(w * 0.5, h * 0.31), w * 0.12, dot);
-  }
-
-  @override
-  bool shouldRepaint(_) => false;
-}
-
-// ─── Custom checkbox with green court style ───────────────────────────────────
-class _CourtCheckbox extends StatelessWidget {
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  const _CourtCheckbox({required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 20,
-        height: 20,
-        decoration: BoxDecoration(
-          color: value ? AppColor.kCourtGreen : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: value ? AppColor.kCourtGreen : Colors.grey[300]!,
-            width: 1.6,
+    return SzCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(label, style: AppText.body(color: AppColor.textMuted))),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(color: highlight ? const Color(0xFFB2F2BA) : AppColor.mint, borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, size: 20, color: AppColor.primaryDark),
           ),
-        ),
-        child: value
-            ? const Icon(Icons.check_rounded, color: AppColor.kLineWhite, size: 13)
-            : null,
-      ),
+        ]),
+        const SizedBox(height: 10),
+        value == null
+            ? const SzSkeleton(width: 80, height: 28)
+            : Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+                Text(Fmt.number(value!), style: AppText.stat(size: 30, color: highlight ? AppColor.primary : AppColor.forest)),
+                const SizedBox(width: 6),
+                Text(unit, style: AppText.label(color: AppColor.textMuted)),
+              ]),
+      ]),
     );
   }
 }
-//endregion
+
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  const _ErrorBanner(this.message);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(color: AppColor.dangerSoft, borderRadius: BorderRadius.circular(AppRadius.sm), border: Border.all(color: const Color(0xFFFCA5A5))),
+      child: Row(children: [
+        const Icon(Icons.error_outline_rounded, color: AppColor.danger, size: 18),
+        const SizedBox(width: 8),
+        Expanded(child: Text(message, style: AppText.label(color: const Color(0xFFB91C1C)))),
+      ]),
+    );
+  }
+}
+
+class AuthFooterLink extends StatelessWidget {
+  final String text;
+  final String action;
+  final VoidCallback onTap;
+
+  const AuthFooterLink({super.key, required this.text, required this.action, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Text(text, style: AppText.bodyLg(color: AppColor.textMuted)),
+      TextButton(onPressed: onTap, child: Text(action, style: AppText.bodyLg(color: AppColor.primaryDark).copyWith(fontWeight: FontWeight.w700))),
+    ]);
+  }
+}

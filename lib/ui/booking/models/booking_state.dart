@@ -1,6 +1,5 @@
 // lib/ui/booking/models/booking_state.dart
 
-import 'package:flutter/material.dart';
 import 'package:application/model/san_model.dart';
 
 /// Trạng thái của 1 ô time slot trong grid

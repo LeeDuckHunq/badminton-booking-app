@@ -1,13 +1,17 @@
-// lib/ui/account/screens/claim_voucher/claim_voucher_screen.dart
-
+// lib/ui/screen/ClaimVoucherScreen.dart
 import 'package:application/api/claim_voucher_api.dart';
 import 'package:application/model/khuyen_mai_model.dart';
 import 'package:application/ui/claim_voucher/widgets/confetti_overlay.dart';
 import 'package:application/ui/claim_voucher/widgets/voucher_card.dart';
 import 'package:application/ui/theme/app_color.dart';
+import 'package:application/ui/theme/app_theme.dart';
+import 'package:application/ui/widget/sz.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+enum _VFilter { all, expiring, big }
+
+/// M13 – Kho voucher (tab Khám phá).
 class ClaimVoucherScreen extends StatefulWidget {
   const ClaimVoucherScreen({super.key});
 
@@ -15,294 +19,224 @@ class ClaimVoucherScreen extends StatefulWidget {
   State<ClaimVoucherScreen> createState() => _ClaimVoucherScreenState();
 }
 
-class _ClaimVoucherScreenState extends State<ClaimVoucherScreen>
-    with SingleTickerProviderStateMixin {
+class _ClaimVoucherScreenState extends State<ClaimVoucherScreen> with SingleTickerProviderStateMixin {
   List<KhuyenMaiModel> _vouchers = [];
-  bool _isLoading = true;
-  String? _username;
+  bool _loading = true;
+  bool _failed = false;
+  String _username = '';
   final Set<String> _claiming = {};
+  _VFilter _filter = _VFilter.all;
+  final _codeCtrl = TextEditingController();
+  bool _redeeming = false;
 
-  late AnimationController _confettiCtrl;
+  late final AnimationController _confetti = AnimationController(vsync: this, duration: const Duration(milliseconds: 2000));
 
   @override
   void initState() {
     super.initState();
-    _confettiCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    );
     _init();
   }
 
   @override
   void dispose() {
-    _confettiCtrl.dispose();
+    _confetti.dispose();
+    _codeCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     _username = prefs.getString('username') ?? '';
-    await _loadVouchers();
+    await _load();
   }
 
-  Future<void> _loadVouchers() async {
-    if (_username == null || _username!.isEmpty) return;
-    setState(() => _isLoading = true);
-    final list = await ClaimVoucherApi.getAvailableVouchers(_username!);
+  Future<void> _load() async {
+    if (_username.isEmpty) return;
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+    final list = await ClaimVoucherApi.getAvailableVouchers(_username);
     if (!mounted) return;
     setState(() {
-      _vouchers = list;
-      _isLoading = false;
+      _vouchers = list ?? [];
+      _failed = list == null;
+      _loading = false;
     });
   }
 
-  Future<void> _claimVoucher(KhuyenMaiModel voucher) async {
-    if (_claiming.contains(voucher.maKhuyenMai)) return;
-    setState(() => _claiming.add(voucher.maKhuyenMai));
+  List<KhuyenMaiModel> get _visible {
+    final now = DateTime.now();
+    final list = _vouchers.where((v) => switch (_filter) {
+          _VFilter.all => true,
+          _VFilter.expiring => v.ngayKetThuc.difference(now).inDays <= 3,
+          _VFilter.big => v.phanTramGiam >= 0.2,
+        }).toList();
+    list.sort((a, b) => a.ngayKetThuc.compareTo(b.ngayKetThuc));
+    return list;
+  }
 
-    final ok = await ClaimVoucherApi.claimVoucher(
-      username: _username!,
-      maKhuyenMai: voucher.maKhuyenMai,
-    );
-
+  Future<void> _claim(String code) async {
+    final result = await ClaimVoucherApi.claimVoucher(maKhuyenMai: code);
     if (!mounted) return;
-
-    if (ok) {
-      _confettiCtrl.forward(from: 0);
-      _showSuccessSnack(voucher);
-      await _loadVouchers();
+    if (result.ok) {
+      _confetti.forward(from: 0);
+      showSzSnack(context, '🎉 ${result.message}! Voucher đã vào ví của bạn.');
+      await _load();
     } else {
-      _showErrorSnack();
+      showSzSnack(context, result.message, type: SzToast.error);
     }
-
-    if (mounted) setState(() => _claiming.remove(voucher.maKhuyenMai));
   }
 
-  void _showSuccessSnack(KhuyenMaiModel v) {
-    final pct = (v.phanTramGiam * 100).toStringAsFixed(0);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Text('🎉', style: TextStyle(fontSize: 20)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Đã lấy voucher giảm $pct% thành công!',
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: AppColor.kCourtGreen,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+  Future<void> _claimVoucher(KhuyenMaiModel v) async {
+    if (_claiming.contains(v.maKhuyenMai)) return;
+    setState(() => _claiming.add(v.maKhuyenMai));
+    await _claim(v.maKhuyenMai);
+    if (mounted) setState(() => _claiming.remove(v.maKhuyenMai));
   }
 
-  void _showErrorSnack() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Lấy voucher thất bại. Thử lại nhé!',
-            style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.red[700],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+  Future<void> _redeemCode() async {
+    final code = _codeCtrl.text.trim();
+    if (code.isEmpty) {
+      showSzSnack(context, 'Nhập mã voucher trước nhé', type: SzToast.warning);
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() => _redeeming = true);
+    await _claim(code);
+    if (!mounted) return;
+    setState(() => _redeeming = false);
+    _codeCtrl.clear();
   }
 
   @override
   Widget build(BuildContext context) {
+    final list = _visible;
+    final now = DateTime.now();
+    final expiringCount = _vouchers.where((v) => v.ngayKetThuc.difference(now).inDays <= 3).length;
+    final bigCount = _vouchers.where((v) => v.phanTramGiam >= 0.2).length;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F4),
-      body: Stack(
-        children: [
-          RefreshIndicator(
-            color: AppColor.kCourtGreen,
-            onRefresh: _loadVouchers,
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                _buildHeader(),
-                if (_isLoading)
-                  const SliverFillRemaining(
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: AppColor.kCourtGreen,
-                        strokeWidth: 2.5,
-                      ),
-                    ),
-                  )
-                else if (_vouchers.isEmpty)
-                  SliverFillRemaining(child: _buildEmpty())
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                            (_, i) => VoucherCard(
-                          voucher: _vouchers[i],
-                          isClaiming:
-                          _claiming.contains(_vouchers[i].maKhuyenMai),
-                          onClaim: () => _claimVoucher(_vouchers[i]),
-                          index: i,
-                        ),
-                        childCount: _vouchers.length,
-                      ),
-                    ),
+      body: Stack(children: [
+        Column(children: [
+          const SzBrandHeader(subtitle: 'Khám phá'),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                children: [
+                  _Hero(count: _vouchers.length, loading: _loading),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 42,
+                    child: ListView(scrollDirection: Axis.horizontal, children: [
+                      SzChip('Tất cả', count: _vouchers.length, selected: _filter == _VFilter.all, onTap: () => setState(() => _filter = _VFilter.all)),
+                      const SizedBox(width: 8),
+                      SzChip('Sắp hết hạn', icon: Icons.alarm_rounded, count: expiringCount, selected: _filter == _VFilter.expiring, onTap: () => setState(() => _filter = _VFilter.expiring)),
+                      const SizedBox(width: 8),
+                      SzChip('Giảm từ 20%', icon: Icons.local_fire_department_outlined, count: bigCount, selected: _filter == _VFilter.big, onTap: () => setState(() => _filter = _VFilter.big)),
+                    ]),
                   ),
-              ],
+                  const SizedBox(height: 14),
+                  if (_loading)
+                    for (var i = 0; i < 3; i++) const Padding(padding: EdgeInsets.only(bottom: 12), child: SzSkeleton(height: 130, radius: AppRadius.lg))
+                  else if (_failed)
+                    SzErrorState(message: 'Không tải được kho voucher.', onRetry: _load)
+                  else if (list.isEmpty)
+                    SzEmptyState(
+                      icon: Icons.redeem_rounded,
+                      title: _vouchers.isEmpty ? 'Hết voucher rồi!' : 'Không có voucher phù hợp',
+                      message: _vouchers.isEmpty ? 'Bạn đã nhận hết voucher đang mở. Quay lại sau để săn deal mới nhé.' : 'Thử chọn bộ lọc khác.',
+                    )
+                  else
+                    for (final v in list) ...[
+                      VoucherTicket(
+                        voucher: v,
+                        action: SzButton.small(
+                          'Lấy ngay',
+                          uppercase: true,
+                          kind: SzButtonKind.dark,
+                          loading: _claiming.contains(v.maKhuyenMai),
+                          onPressed: () => _claimVoucher(v),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  const SizedBox(height: 8),
+                  _codeCard(),
+                ],
+              ),
             ),
           ),
-          AnimatedBuilder(
-            animation: _confettiCtrl,
-            builder: (_, __) => _confettiCtrl.value > 0
-                ? ConfettiOverlay(progress: _confettiCtrl.value)
-                : const SizedBox.shrink(),
-          ),
-        ],
-      ),
+        ]),
+        Positioned.fill(child: AnimatedBuilder(animation: _confetti, builder: (_, __) => ConfettiOverlay(progress: _confetti.value))),
+      ]),
     );
   }
 
-  SliverAppBar _buildHeader() {
-    final top = MediaQuery.of(context).padding.top;
-    return SliverAppBar(
-      expandedHeight: 165,
-      floating: false,
-      pinned: true,
-      backgroundColor: AppColor.kDeepGreen,
-      elevation: 0,
-      actions: [
-        IconButton(
-          onPressed: _isLoading ? null : _loadVouchers,
-          icon: _isLoading
-              ? const SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(
-                strokeWidth: 2, color: Colors.white),
-          )
-              : const Icon(Icons.refresh_rounded, color: Colors.white),
-        ),
-      ],
-      flexibleSpace: FlexibleSpaceBar(
-        background: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [AppColor.kDeepGreen, AppColor.kCourtGreen],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+  Widget _codeCard() {
+    return SzCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(width: 44, height: 44, decoration: BoxDecoration(color: AppColor.mint, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.card_giftcard_rounded, color: AppColor.primary)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Nhập mã voucher', style: AppText.headlineSm()),
+              const SizedBox(height: 2),
+              Text('Có mã từ chủ sân hoặc sự kiện? Nhập vào đây để nạp thẳng vào ví.', style: AppText.bodySm()),
+            ]),
           ),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(20, top + 16, 20, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Spacer(),
-                Row(
-                  children: [
-                    const Icon(Icons.local_fire_department_rounded,
-                        color: AppColor.kAccentYellow, size: 20),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'SmashZone',
-                      style: TextStyle(
-                        color: AppColor.kAccentYellow,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (!_isLoading)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '${_vouchers.length} voucher',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const Text(
-                  'Kho Voucher',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 28,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Những ưu đãi đang chờ bạn săn 🔥',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-      title: const Text(
-        'Kho Voucher',
-        style: TextStyle(
-            color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17),
-      ),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: SzTextField(controller: _codeCtrl, hint: 'VD: KM10', icon: Icons.sell_outlined, textInputAction: TextInputAction.done, onSubmitted: (_) => _redeemCode())),
+          const SizedBox(width: 8),
+          SzButton('Áp dụng', kind: SzButtonKind.dark, loading: _redeeming, onPressed: _redeemCode),
+        ]),
+      ]),
     );
   }
+}
 
-  Widget _buildEmpty() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: AppColor.kMintField,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.local_offer_rounded,
-                color: AppColor.kCourtGreen, size: 38),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Hết voucher rồi!',
-            style: TextStyle(
-              color: AppColor.kTextDark,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Bạn đã sở hữu tất cả voucher hiện có 🎉',
-            style: TextStyle(color: Colors.grey[500], fontSize: 13),
-          ),
-        ],
+class _Hero extends StatelessWidget {
+  final int count;
+  final bool loading;
+  const _Hero({required this.count, required this.loading});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(colors: [AppColor.primaryDark, AppColor.primary], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        boxShadow: AppShadow.primaryGlow,
       ),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SzPill.accent('ƯU ĐÃI ĐỘC QUYỀN', icon: Icons.bolt_rounded),
+            const SizedBox(height: 10),
+            Text('Kho Voucher\nSăn Deal Sân', style: AppText.display(color: Colors.white).copyWith(fontSize: 26, height: 1.2)),
+            const SizedBox(height: 6),
+            Text('Nhận miễn phí, áp dụng khi thanh toán đặt sân.', style: AppText.body(color: const Color(0xFFCFF5D6))),
+          ]),
+        ),
+        const SizedBox(width: 12),
+        Container(
+          width: 92,
+          height: 92,
+          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(20)),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.confirmation_number_rounded, color: AppColor.accent, size: 28),
+            const SizedBox(height: 4),
+            Text(loading ? '…' : '$count', style: AppText.stat(size: 24, color: Colors.white)),
+            Text('mã đang mở', style: AppText.labelSm(color: const Color(0xFFCFF5D6))),
+          ]),
+        ),
+      ]),
     );
   }
 }

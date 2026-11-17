@@ -1,23 +1,21 @@
-// lib/ui/booking/booking_schedule_screen.dart
-
+// lib/ui/screen/booking_schedule_screen.dart
 import 'package:application/api/phieu_dat_san_api.dart';
 import 'package:application/api/san_api.dart';
 import 'package:application/model/create_phieu_dat_model.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
-import 'package:application/ui/screen/invoice_screen.dart';
 import 'package:application/ui/invoice/models/invoice_model.dart';
-import 'package:flutter/material.dart';
+import 'package:application/ui/screen/invoice_screen.dart';
 import 'package:application/ui/theme/app_color.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:application/ui/theme/app_theme.dart';
+import 'package:application/ui/widget/sz.dart';
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../booking/models/booking_state.dart';
-import '../booking/widgets/booking_date_picker.dart';
-import '../booking/widgets/booking_grid.dart';
-import '../booking/widgets/booking_legend.dart';
-import '../booking/widgets/booking_summary_bar.dart';
 
+/// M7 – Lịch đặt sân (ma trận ô 30 phút).
 class BookingScheduleScreen extends StatefulWidget {
   final CumSanModel cumSan;
 
@@ -28,658 +26,721 @@ class BookingScheduleScreen extends StatefulWidget {
 }
 
 class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
-  // ── Data ──────────────────────────────────────────────────────────────────
+  static const double _nameColWidth = 104;
+  static const double _cellWidth = 64;
+  static const double _cellHeight = 56;
+  static const double _cellGap = 6;
+
   List<SanModel> _sanList = [];
   List<PhieuDatSanModel> _phieuList = [];
-
   bool _isLoading = true;
+  bool _submitting = false;
   String? _errorMsg;
 
-  // ── User ──────────────────────────────────────────────────────────────────
-  String _maNguoiDung = '';
-
-  // ── Date selection ────────────────────────────────────────────────────────
-  late DateTime _selectedDate;
-
-  // ── Slot selection ────────────────────────────────────────────────────────
+  late DateTime _selectedDate = _today();
   String? _selectedMaSan;
   final Set<DateTime> _selectedStarts = {};
-
-  // ── Computed ──────────────────────────────────────────────────────────────
   Map<String, List<TimeSlot>> _slotMap = {};
-  BookingSelection? _currentSelection;
+  BookingSelection? _selection;
+
+  final _gridScroll = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _selectedDate = _today();
-    _loadUser();
     _loadData();
   }
 
-  Future<void> _loadUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() => _maNguoiDung = prefs.getString('username') ?? '');
+  @override
+  void dispose() {
+    _gridScroll.dispose();
+    super.dispose();
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Dữ liệu ───────────────────────────────────────────────────────────────
 
   DateTime _today() {
     final now = DateTime.now();
     return DateTime(now.year, now.month, now.day);
   }
 
+  bool _isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
   TimeOfDay _parseTime(String t) {
     final p = t.split(':');
-    return TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1]));
+    return TimeOfDay(hour: int.tryParse(p[0]) ?? 0, minute: p.length > 1 ? int.tryParse(p[1]) ?? 0 : 0);
   }
 
-  DateTime _toDateTime(DateTime date, TimeOfDay time) =>
-      DateTime(date.year, date.month, date.day, time.hour, time.minute);
-
-  // ── Data loading ──────────────────────────────────────────────────────────
+  DateTime _at(DateTime date, TimeOfDay t) => DateTime(date.year, date.month, date.day, t.hour, t.minute);
 
   Future<void> _loadData() async {
-    setState(() { _isLoading = true; _errorMsg = null; });
-
+    setState(() {
+      _isLoading = true;
+      _errorMsg = null;
+    });
     try {
       final results = await Future.wait([
         SanApi.getSanTheoCumSan(widget.cumSan.maCumSan),
         PhieuDatSanApi.getPhieuDatTheoNgay(_selectedDate),
       ]);
-
-      _sanList   = results[0] as List<SanModel>;
+      _sanList = results[0] as List<SanModel>;
       _phieuList = results[1] as List<PhieuDatSanModel>;
-
       _buildSlotMap();
-    } catch (e) {
-      _errorMsg = 'Không thể tải dữ liệu. Vui lòng thử lại.';
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    } catch (_) {
+      _errorMsg = 'Không thể tải lịch sân. Vui lòng thử lại.';
     }
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    _scrollToNow();
   }
 
-  // Chỉ load lại lịch đặt khi đổi ngày (không cần load lại sân)
   Future<void> _reloadBookings() async {
     setState(() => _isLoading = true);
-
     try {
       _phieuList = await PhieuDatSanApi.getPhieuDatTheoNgay(_selectedDate);
+      _errorMsg = null;
       _clearSelection();
       _buildSlotMap();
     } catch (_) {
       _errorMsg = 'Không thể tải lịch đặt.';
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    _scrollToNow();
   }
 
-  // ── Slot map builder ──────────────────────────────────────────────────────
-
-  /// Xây dựng map[maSan] → list TimeSlot dựa trên giờ mở/đóng cửa
   void _buildSlotMap() {
-    final map = <String, List<TimeSlot>>{};
+    final open = _at(_selectedDate, _parseTime(widget.cumSan.gioMoCua));
+    var close = _at(_selectedDate, _parseTime(widget.cumSan.gioDongCua));
+    if (!close.isAfter(open)) close = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, 23, 59);
 
-    final openTime  = _parseTime(widget.cumSan.gioMoCua);
-    final closeTime = _parseTime(widget.cumSan.gioDongCua);
-
-    final open  = _toDateTime(_selectedDate, openTime);
-    final close = _toDateTime(_selectedDate, closeTime);
-
-    // Chỉ tính những phiếu đã xác nhận là blocked
-    final bookedMap = <String, List<(DateTime, DateTime)>>{};
+    final booked = <String, List<(DateTime, DateTime)>>{};
     for (final p in _phieuList) {
       if (p.trangThai == 'DA_XAC_NHAN' || p.trangThai == 'CHO_XAC_NHAN') {
-        bookedMap.putIfAbsent(p.maSan, () => []).add((p.batDau, p.ketThuc));
+        booked.putIfAbsent(p.maSan, () => []).add((p.batDau, p.ketThuc));
       }
     }
 
+    final now = DateTime.now();
+    final map = <String, List<TimeSlot>>{};
     for (final san in _sanList) {
       final slots = <TimeSlot>[];
-      DateTime cur = open;
-
+      var cur = open;
       while (cur.isBefore(close)) {
-        final slotEnd = cur.add(const Duration(minutes: 30));
-
-        // Kiểm tra xem slot này có bị đặt không
-        final isBooked = (bookedMap[san.maSan] ?? []).any((range) {
-          final (start, end) = range;
-          // Overlap nếu start < slotEnd && end > cur
-          return start.isBefore(slotEnd) && end.isAfter(cur);
-        });
-
-        // Slot trong quá khứ → locked
-        final now = DateTime.now();
-        final isPast = cur.isBefore(now) && _isSameDay(_selectedDate, _today());
-
-        slots.add(TimeSlot(
-          maSan: san.maSan,
-          start: cur,
-          end: slotEnd,
-          status: isPast
-              ? SlotStatus.locked
-              : isBooked
-              ? SlotStatus.booked
-              : SlotStatus.available,
-        ));
-
-        cur = slotEnd;
+        final end = cur.add(const Duration(minutes: 30));
+        final isBooked = (booked[san.maSan] ?? []).any((r) => r.$1.isBefore(end) && r.$2.isAfter(cur));
+        final isPast = cur.isBefore(now);
+        slots.add(TimeSlot(maSan: san.maSan, start: cur, end: end, status: isPast ? SlotStatus.locked : (isBooked ? SlotStatus.booked : SlotStatus.available)));
+        cur = end;
       }
-
       map[san.maSan] = slots;
     }
-
     _slotMap = map;
   }
 
-  // ── Selection logic ───────────────────────────────────────────────────────
+  /// Hôm nay: cuộn lưới tới khung giờ hiện tại.
+  void _scrollToNow() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_gridScroll.hasClients || _sanList.isEmpty) return;
+      final slots = _slotMap[_sanList.first.maSan] ?? [];
+      final firstOpen = slots.indexWhere((s) => s.status != SlotStatus.locked);
+      final index = (firstOpen < 0 ? 0 : firstOpen - 1).clamp(0, slots.length);
+      final target = (index * (_cellWidth + _cellGap)).clamp(0.0, _gridScroll.position.maxScrollExtent);
+      _gridScroll.jumpTo(target.toDouble());
+    });
+  }
+
+  // ── Chọn ô ────────────────────────────────────────────────────────────────
 
   void _onSlotTap(TimeSlot slot) {
+    if (!slot.isSelectable) return;
     setState(() {
-      // Click vào sân khác → reset
-      if (_selectedMaSan != null && _selectedMaSan != slot.maSan) {
-        _clearSelection();
-      }
-
+      if (_selectedMaSan != null && _selectedMaSan != slot.maSan) _clearSelection();
       _selectedMaSan = slot.maSan;
-
       if (_selectedStarts.contains(slot.start)) {
-        // Bỏ chọn ô đang chọn
-        _selectedStarts.remove(slot.start);
+        final sorted = _selectedStarts.toList()..sort();
+        // Bỏ chọn ô ở giữa thì giữ phần liền mạch phía trước.
+        if (slot.start != sorted.first && slot.start != sorted.last) {
+          _selectedStarts.removeWhere((s) => !s.isBefore(slot.start));
+        } else {
+          _selectedStarts.remove(slot.start);
+        }
         if (_selectedStarts.isEmpty) _selectedMaSan = null;
       } else {
-        // Kiểm tra liên tiếp: ô mới phải kề với selection hiện tại
-        if (_selectedStarts.isNotEmpty && !_isAdjacentToSelection(slot)) {
-          // Reset và chọn lại từ ô này
-          _selectedStarts.clear();
-        }
+        if (_selectedStarts.isNotEmpty && !_isAdjacent(slot)) _selectedStarts.clear();
         _selectedStarts.add(slot.start);
       }
-
       _updateSelection();
     });
   }
 
-  bool _isAdjacentToSelection(TimeSlot slot) {
-    if (_selectedStarts.isEmpty) return true;
-
+  bool _isAdjacent(TimeSlot slot) {
     final sorted = _selectedStarts.toList()..sort();
-    final earliest = sorted.first;
-    final latest   = sorted.last;
-
-    // Ô mới phải ngay trước earliest hoặc ngay sau latest
-    final before = slot.start.add(const Duration(minutes: 30));
-    final after  = slot.start.subtract(const Duration(minutes: 30));
-
-    return before == earliest || after == latest;
+    return slot.start.add(const Duration(minutes: 30)) == sorted.first || slot.start.subtract(const Duration(minutes: 30)) == sorted.last;
   }
 
   void _updateSelection() {
     if (_selectedStarts.isEmpty || _selectedMaSan == null) {
-      _currentSelection = null;
+      _selection = null;
       return;
     }
-
     final san = _sanList.firstWhere((s) => s.maSan == _selectedMaSan);
     final sorted = _selectedStarts.toList()..sort();
-
-    _currentSelection = BookingSelection(
-      san: san,
-      batDau: sorted.first,
-      ketThuc: sorted.last.add(const Duration(minutes: 30)),
-    );
+    _selection = BookingSelection(san: san, batDau: sorted.first, ketThuc: sorted.last.add(const Duration(minutes: 30)));
   }
 
   void _clearSelection() {
     _selectedMaSan = null;
     _selectedStarts.clear();
-    _currentSelection = null;
+    _selection = null;
   }
 
-  // ── Confirm booking ───────────────────────────────────────────────────────
+  // ── Đặt sân ───────────────────────────────────────────────────────────────
 
-  void _onConfirmBooking() {
-    if (_currentSelection == null) return;
-    _showConfirmDialog(_currentSelection!);
-  }
-
-  void _showConfirmDialog(BookingSelection sel) {
+  void _openConfirm() {
+    final sel = _selection;
+    if (sel == null) return;
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _ConfirmBottomSheet(
-        selection: sel,
-        onConfirm: () => _submitBooking(sel), // chỉ gọi submit, navigate bên trong
-        onCancel: () => Navigator.pop(context),
-      ),
+      builder: (_) => _ConfirmSheet(cumSan: widget.cumSan, selection: sel, onConfirm: () => _submit(sel)),
     );
   }
 
-  /// Gửi request tạo phiếu đặt — đứng im tại đây sau khi xong
-  Future<void> _submitBooking(BookingSelection sel) async {
-    // 1. Đóng bottom sheet
+  Future<void> _submit(BookingSelection sel) async {
     Navigator.pop(context);
-
-    // 2. Hiện loading snackbar
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            SizedBox(
-              width: 16, height: 16,
-              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-            ),
-            SizedBox(width: 12),
-            Text('Đang gửi yêu cầu đặt sân...'),
-          ],
-        ),
-        backgroundColor: AppColor.kCourtGreen,
-        duration: const Duration(seconds: 30),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-
-    // 3. Gọi API — nhận về maPhieuDat
-    final request = CreatePhieuDatModel(
-      maNguoiDung: _maNguoiDung,
-      maSan: sel.san.maSan,
-      batDau: sel.batDau,
-      ketThuc: sel.ketThuc,
-    );
-
-    final maPhieuDat = await PhieuDatSanApi.createPhieuDat(request);
-
+    setState(() => _submitting = true);
+    final result = await PhieuDatSanApi.createPhieuDat(CreatePhieuDatModel(maNguoiDung: '', maSan: sel.san.maSan, batDau: sel.batDau, ketThuc: sel.ketThuc));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    setState(() => _submitting = false);
 
-    // 4. Xử lý kết quả
+    final maPhieuDat = result.maPhieuDat;
     if (maPhieuDat == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('❌ Đặt sân thất bại. Vui lòng thử lại!'),
-          backgroundColor: Colors.red[700],
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      showSzSnack(context, result.message ?? 'Đặt sân thất bại. Vui lòng thử lại!', type: SzToast.error);
+      _reloadBookings();
       return;
     }
 
-    // 5. Navigate sang InvoiceScreen với đầy đủ dữ liệu
-    Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => InvoiceScreen(
+          maPhieuDat: maPhieuDat,
           booking: InvoiceBookingInfo(
-            maPhieuDat: maPhieuDat,         // ← từ API
+            maPhieuDat: maPhieuDat,
             tenCumSan: widget.cumSan.tenCumSan,
             tenSan: sel.san.tenSan,
             diaChi: widget.cumSan.diaChi,
             batDau: sel.batDau,
             ketThuc: sel.ketThuc,
             tongTien: sel.tongTien,
+            giaGio: sel.san.gia,
           ),
-          maPhieuDat: maPhieuDat,
         ),
       ),
-    ).then((_) => setState(() {}));
-
-    // 6. Reload lịch sân sau khi navigate
-    setState(() => _clearSelection());
-    await _reloadBookings();
+    );
+    if (mounted) _reloadBookings();
   }
 
-  // ── UI ────────────────────────────────────────────────────────────────────
+  Future<void> _openMap() async {
+    final q = Uri.encodeComponent(widget.cumSan.diaChi);
+    await launchUrl(Uri.parse('https://www.google.com/maps/search/?api=1&query=$q'), mode: LaunchMode.externalApplication);
+  }
+
+  // ── Giao diện ─────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F4),
-      body: Column(
-        children: [
-          _buildHeader(),
-          _buildDatePicker(),
-          const Divider(height: 1, color: Color(0xFFE8EDE9)),
-          const BookingLegend(),
-          const Divider(height: 1, color: Color(0xFFE8EDE9)),
-          Expanded(child: _buildBody()),
-          BookingSummaryBar(
-            selection: _currentSelection,
-            onConfirm: _onConfirmBooking,
-            onClear: () => setState(() => _clearSelection()),
-          ),
-          // Safe area bottom
-          SizedBox(height: MediaQuery.of(context).padding.bottom),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColor.kDeepGreen, AppColor.kCourtGreen],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 16, 14),
-          child: Row(
+      appBar: const SzTopBar(title: 'Đặt lịch sân'),
+      body: Stack(children: [
+        RefreshIndicator(
+          onRefresh: _loadData,
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: 24),
             children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                    color: AppColor.kLineWhite, size: 20),
-                onPressed: () => Navigator.pop(context),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.cumSan.tenCumSan,
-                      style: const TextStyle(
-                        color: AppColor.kLineWhite,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.2,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        const Icon(Icons.access_time_rounded,
-                            color: Colors.white60, size: 12),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${widget.cumSan.gioMoCua} – ${widget.cumSan.gioDongCua}',
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 12),
-                        ),
-                        const SizedBox(width: 10),
-                        const Icon(Icons.location_on_outlined,
-                            color: Colors.white60, size: 12),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            widget.cumSan.diaChi,
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 12),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              // Refresh
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded,
-                    color: AppColor.kLineWhite, size: 22),
-                onPressed: _isLoading ? null : _reloadBookings,
-              ),
+              _buildVenueHeader(),
+              _buildDateStrip(),
+              _buildLegend(),
+              if (_isLoading)
+                const Padding(padding: EdgeInsets.symmetric(vertical: 64), child: SzLoading(message: 'Đang tải lịch sân…'))
+              else if (_errorMsg != null)
+                SzErrorState(message: _errorMsg!, onRetry: _loadData)
+              else if (_sanList.isEmpty)
+                const SzEmptyState(icon: Icons.event_busy_rounded, title: 'Chưa có sân hoạt động', message: 'Cụm sân này hiện chưa mở sân nào để đặt.')
+              else
+                _buildGrid(),
             ],
           ),
         ),
-      ),
+        if (_submitting)
+          Container(color: const Color(0x590D2E18), alignment: Alignment.center, child: const SzCard(child: SzLoading(message: 'Đang giữ chỗ cho bạn…'))),
+      ]),
+      bottomNavigationBar: _buildSummaryBar(),
     );
   }
 
-  Widget _buildDatePicker() {
+  Widget _buildVenueHeader() {
+    final c = widget.cumSan;
     return Container(
-      color: AppColor.kLineWhite,
-      child: BookingDatePicker(
-        selectedDate: _selectedDate,
-        onDateChanged: (date) {
-          if (_isSameDay(date, _selectedDate)) return;
-          setState(() => _selectedDate = date);
-          _reloadBookings();
-        },
-      ),
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SzPill('${_sanList.isEmpty ? c.soSan : _sanList.length} sân đang mở', icon: Icons.stadium_outlined),
+            const SizedBox(height: 8),
+            Text(c.tenCumSan, style: AppText.headlineLg(color: AppColor.primary)),
+            const SizedBox(height: 6),
+            Row(children: [
+              const Icon(Icons.schedule_rounded, size: 15, color: AppColor.textMuted),
+              const SizedBox(width: 4),
+              Text(Fmt.hours(c.gioMoCua, c.gioDongCua), style: AppText.body(color: AppColor.textMuted)),
+              const SizedBox(width: 10),
+              const Icon(Icons.location_on_outlined, size: 15, color: AppColor.textMuted),
+              const SizedBox(width: 4),
+              Expanded(child: Text(c.diaChi, style: AppText.body(color: AppColor.textMuted), maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ]),
+          ]),
+        ),
+        const SizedBox(width: 12),
+        SzIconButton(Icons.map_outlined, size: 48, background: AppColor.mint, color: AppColor.primary, tooltip: 'Xem bản đồ', onPressed: _openMap),
+      ]),
     );
   }
 
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-                color: AppColor.kCourtGreen, strokeWidth: 2.5),
-            SizedBox(height: 14),
-            Text('Đang tải lịch sân...',
-                style: TextStyle(
-                    color: AppColor.kCourtGreen,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500)),
-          ],
+  Widget _buildDateStrip() {
+    final today = _today();
+    final days = List.generate(14, (i) => today.add(Duration(days: i)));
+    return Container(
+      color: AppColor.canvas,
+      padding: const EdgeInsets.only(top: 14, bottom: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(children: [
+            const Icon(Icons.calendar_month_rounded, size: 18, color: AppColor.text),
+            const SizedBox(width: 6),
+            Text('Tháng ${_selectedDate.month}, ${_selectedDate.year}', style: AppText.labelLg()),
+            const Spacer(),
+            Text('Vuốt để xem thêm ngày', style: AppText.label(color: AppColor.textMuted)),
+          ]),
         ),
-      );
-    }
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 78,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: days.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, i) {
+              final d = days[i];
+              final selected = _isSameDay(d, _selectedDate);
+              final top = i == 0 ? 'HÔM NAY' : (i == 1 ? 'MAI' : Fmt.weekdayShort(d));
+              return Material(
+                color: selected ? AppColor.primaryDark : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                elevation: selected ? 2 : 0,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () {
+                    if (selected) return;
+                    setState(() => _selectedDate = d);
+                    _reloadBookings();
+                  },
+                  child: Container(
+                    width: i == 0 ? 76 : 60,
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: selected ? null : Border.all(color: AppColor.border)),
+                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Text(top, style: AppText.labelSm(color: selected ? const Color(0xFFCFF5D6) : AppColor.textMuted)),
+                      const SizedBox(height: 2),
+                      Text('${d.day}', style: AppText.stat(size: 22, color: selected ? Colors.white : AppColor.text)),
+                      if (i < 2) Text(Fmt.weekdayShort(d), style: AppText.labelSm(color: selected ? const Color(0xFFCFF5D6) : AppColor.textMuted)),
+                    ]),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ]),
+    );
+  }
 
-    if (_errorMsg != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.wifi_off_rounded, color: Colors.grey[400], size: 48),
-            const SizedBox(height: 12),
-            Text(_errorMsg!,
-                style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-            const SizedBox(height: 16),
-            TextButton.icon(
-              onPressed: _loadData,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Thử lại'),
-              style: TextButton.styleFrom(
-                  foregroundColor: AppColor.kCourtGreen),
+  Widget _buildLegend() {
+    Widget item(Widget swatch, String label, {bool strong = false}) => Row(mainAxisSize: MainAxisSize.min, children: [
+          swatch,
+          const SizedBox(width: 6),
+          Text(label, style: strong ? AppText.labelLg(color: AppColor.primaryDark) : AppText.body(color: AppColor.textMuted)),
+        ]);
+    Widget box({Color color = Colors.white, Color border = AppColor.border, Widget? child}) =>
+        Container(width: 18, height: 18, clipBehavior: Clip.antiAlias, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(5), border: Border.all(color: border)), child: child);
+
+    return Container(
+      color: AppColor.canvas,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Column(children: [
+        Wrap(spacing: 16, runSpacing: 8, children: [
+          item(box(), 'Trống'),
+          item(box(color: AppColor.primaryDark, border: AppColor.primaryDark, child: const Icon(Icons.check_rounded, size: 13, color: Colors.white)), 'Đang chọn', strong: true),
+          item(box(color: const Color(0xFFE2E8F0), border: const Color(0xFFCBD5E1), child: CustomPaint(painter: _HatchPainter())), 'Đã đặt'),
+          item(box(color: AppColor.slot, child: const Icon(Icons.lock_rounded, size: 11, color: AppColor.textSubtle)), 'Đã qua'),
+        ]),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(color: AppColor.mint, borderRadius: BorderRadius.circular(AppRadius.sm)),
+          child: Row(children: [
+            const Icon(Icons.touch_app_outlined, size: 18, color: AppColor.primary),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Chạm để chọn các khung giờ 30 phút liền nhau', style: AppText.label(color: AppColor.primaryDark))),
+            Text('Bước: 30p', style: AppText.label(color: AppColor.textMuted)),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildGrid() {
+    final slotsForHeader = _slotMap[_sanList.first.maSan] ?? const <TimeSlot>[];
+    const headerHeight = 44.0;
+    const rowHeight = _cellHeight + 16;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: SzCard(
+        padding: EdgeInsets.zero,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Cột tên sân (ghim cố định)
+          Container(
+            width: _nameColWidth,
+            decoration: const BoxDecoration(color: Colors.white, border: Border(right: BorderSide(color: AppColor.border))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                height: headerHeight,
+                color: AppColor.canvas,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                alignment: Alignment.centerLeft,
+                child: Text('TÊN SÂN', style: AppText.labelSm()),
+              ),
+              for (final san in _sanList)
+                Container(
+                  height: rowHeight,
+                  color: san.maSan == _selectedMaSan ? AppColor.mint : Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      if (san.maSan == _selectedMaSan) ...[Container(width: 6, height: 6, decoration: const BoxDecoration(color: AppColor.primary, shape: BoxShape.circle)), const SizedBox(width: 4)],
+                      Flexible(child: Text(san.tenSan, style: AppText.headlineSm(color: san.maSan == _selectedMaSan ? AppColor.primaryDark : AppColor.text), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ]),
+                    const SizedBox(height: 2),
+                    Text('${_compactPrice(san.gia)}/h', style: AppText.label(color: AppColor.primary)),
+                  ]),
+                ),
+            ]),
+          ),
+          // Lưới ô 30 phút (cuộn ngang)
+          Expanded(
+            child: SingleChildScrollView(
+              controller: _gridScroll,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(
+                  height: headerHeight,
+                  child: Row(children: [
+                    for (final s in slotsForHeader)
+                      Container(
+                        width: _cellWidth,
+                        margin: const EdgeInsets.only(right: _cellGap),
+                        alignment: Alignment.center,
+                        child: Text(Fmt.hhmm(s.start), style: _isSelectedTime(s.start) ? AppText.labelLg(color: AppColor.primaryDark).copyWith(fontWeight: FontWeight.w800) : AppText.label(color: AppColor.textMuted)),
+                      ),
+                  ]),
+                ),
+                for (final san in _sanList)
+                  SizedBox(
+                    height: rowHeight,
+                    child: Row(children: [
+                      for (final slot in _slotMap[san.maSan] ?? const <TimeSlot>[])
+                        Padding(
+                          padding: const EdgeInsets.only(right: _cellGap),
+                          child: _SlotCell(
+                            slot: slot,
+                            width: _cellWidth,
+                            height: _cellHeight,
+                            selected: san.maSan == _selectedMaSan && _selectedStarts.contains(slot.start),
+                            priceLabel: _compactPrice(san.gia / 2),
+                            onTap: () => _onSlotTap(slot),
+                          ),
+                        ),
+                    ]),
+                  ),
+              ]),
             ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      color: AppColor.kLineWhite,
-      child: BookingGrid(
-        sanList: _sanList,
-        slotMap: _slotMap,
-        selectedStarts: _selectedStarts,
-        selectedMaSan: _selectedMaSan,
-        onSlotTap: _onSlotTap,
+          ),
+        ]),
       ),
     );
   }
 
-  bool _isSameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
+  bool _isSelectedTime(DateTime t) => _selectedStarts.contains(t);
+
+  /// 100000 → "100k"; 125000 → "125k"; 1500000 → "1,5tr"
+  String _compactPrice(double v) {
+    if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(v % 1000000 == 0 ? 0 : 1).replaceAll('.', ',')}tr';
+    if (v >= 1000) return '${(v / 1000).toStringAsFixed(v % 1000 == 0 ? 0 : 1).replaceAll('.', ',')}k';
+    return v.toStringAsFixed(0);
+  }
+
+  Widget _buildSummaryBar() {
+    final sel = _selection;
+    return Container(
+      decoration: const BoxDecoration(color: Colors.white, boxShadow: AppShadow.sticky),
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.of(context).padding.bottom),
+      child: sel == null
+          ? Row(children: [
+              const Icon(Icons.info_outline_rounded, color: AppColor.textMuted, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Chọn khung giờ trống trên lưới để đặt sân', style: AppText.body(color: AppColor.textMuted))),
+              const SizedBox(width: 8),
+              const SzButton('ĐẶT SÂN', onPressed: null, height: 48),
+            ])
+          : Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, children: [
+                    SzPill(sel.san.tenSan),
+                    Text('${sel.thoiGianHienThi}  ·  ${Fmt.hoursCount(sel.tongGio)}', style: AppText.label()),
+                  ]),
+                  const SizedBox(height: 4),
+                  FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(Fmt.money(sel.tongTien), style: AppText.stat(size: 26, color: AppColor.primaryDark))),
+                ]),
+              ),
+              const SizedBox(width: 12),
+              Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                SzButton('ĐẶT SÂN', kind: SzButtonKind.dark, height: 52, trailingIcon: Icons.arrow_forward_rounded, onPressed: _openConfirm),
+                TextButton(
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                  onPressed: () => setState(_clearSelection),
+                  child: Text('Bỏ chọn', style: AppText.label(color: AppColor.textMuted)),
+                ),
+              ]),
+            ]),
+    );
+  }
 }
 
-// ── Confirm Bottom Sheet ──────────────────────────────────────────────────────
+class _SlotCell extends StatelessWidget {
+  final TimeSlot slot;
+  final double width;
+  final double height;
+  final bool selected;
+  final String priceLabel;
+  final VoidCallback onTap;
 
-class _ConfirmBottomSheet extends StatelessWidget {
+  const _SlotCell({required this.slot, required this.width, required this.height, required this.selected, required this.priceLabel, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    if (selected) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: AppColor.primaryDark,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(color: const Color(0xFF7FDA91), width: 2),
+            boxShadow: AppShadow.primaryGlow,
+          ),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+            const SizedBox(height: 2),
+            Text(Fmt.hhmm(slot.start), style: AppText.label(color: Colors.white).copyWith(fontWeight: FontWeight.w800)),
+          ]),
+        ),
+      );
+    }
+    switch (slot.status) {
+      case SlotStatus.booked:
+        return Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(AppRadius.sm)),
+          clipBehavior: Clip.antiAlias,
+          child: CustomPaint(painter: _HatchPainter(), child: Center(child: Text('Đã đặt', style: AppText.label(color: AppColor.textMuted)))),
+        );
+      case SlotStatus.locked:
+        return Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(color: AppColor.slot, borderRadius: BorderRadius.circular(AppRadius.sm)),
+          child: const Icon(Icons.lock_outline_rounded, size: 18, color: AppColor.textSubtle),
+        );
+      default:
+        return Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            onTap: onTap,
+            child: Container(
+              width: width,
+              height: height,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(AppRadius.sm), border: Border.all(color: AppColor.border)),
+              child: Text(priceLabel, style: AppText.labelLg()),
+            ),
+          ),
+        );
+    }
+  }
+}
+
+/// Sọc chéo cho ô "Đã đặt".
+class _HatchPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = const Color(0xFFCBD5E1)
+      ..strokeWidth = 1.2;
+    for (double x = -size.height; x < size.width; x += 7) {
+      canvas.drawLine(Offset(x, size.height), Offset(x + size.height, 0), p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// M8 – Xác nhận đặt sân.
+class _ConfirmSheet extends StatelessWidget {
+  final CumSanModel cumSan;
   final BookingSelection selection;
   final VoidCallback onConfirm;
-  final VoidCallback onCancel;
 
-  const _ConfirmBottomSheet({
-    required this.selection,
-    required this.onConfirm,
-    required this.onCancel,
-  });
+  const _ConfirmSheet({required this.cumSan, required this.selection, required this.onConfirm});
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      decoration: const BoxDecoration(
-        color: AppColor.kLineWhite,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(24, 16, 24, bottomPadding + 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle
-            Container(
-              width: 36, height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
+    final sel = selection;
+    final slots = (sel.duration.inMinutes / 30).round();
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const SzSheetHandle(),
+          const SizedBox(height: 4),
+          const SzSheetHeader(icon: Icons.sports_tennis_rounded, title: 'Xác nhận đặt sân', subtitle: 'Kiểm tra thông tin trước khi thanh toán'),
+          const SizedBox(height: 16),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColor.canvas,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: const Border(top: BorderSide(color: AppColor.primary, width: 4)),
             ),
-
-            const SizedBox(height: 20),
-
-            // Icon
-            Container(
-              width: 64, height: 64,
-              decoration: BoxDecoration(
-                color: AppColor.kMintField,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.green[200]!, width: 2),
-              ),
-              child: const Icon(Icons.sports_tennis_rounded,
-                  color: AppColor.kCourtGreen, size: 32),
-            ),
-
-            const SizedBox(height: 16),
-
-            const Text('Xác nhận đặt sân',
-                style: TextStyle(
-                  color: AppColor.kTextDark,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                )),
-
-            const SizedBox(height: 20),
-
-            // Details
-            _DetailRow(icon: Icons.sports_tennis_rounded,
-                label: 'Sân', value: selection.san.tenSan),
-            const SizedBox(height: 10),
-            _DetailRow(icon: Icons.access_time_rounded,
-                label: 'Thời gian', value: selection.thoiGianHienThi),
-            const SizedBox(height: 10),
-            _DetailRow(icon: Icons.timer_outlined,
-                label: 'Tổng giờ',
-                value: '${_fmtHours(selection.tongGio)} giờ'),
-            const SizedBox(height: 10),
-            _DetailRow(icon: Icons.payments_outlined,
-                label: 'Tổng tiền',
-                value: _fmtCurrency(selection.tongTien),
-                valueColor: AppColor.kCourtGreen),
-
-            const SizedBox(height: 24),
-
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: onCancel,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: const BorderSide(color: AppColor.kCourtGreen),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: const Text('Huỷ',
-                        style: TextStyle(
-                            color: AppColor.kCourtGreen,
-                            fontWeight: FontWeight.w700)),
-                  ),
-                ),
+            padding: const EdgeInsets.all(14),
+            child: Column(children: [
+              Row(children: [
+                Container(width: 48, height: 48, decoration: BoxDecoration(color: AppColor.mint, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.stadium_outlined, color: AppColor.primary)),
                 const SizedBox(width: 12),
                 Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    onPressed: onConfirm,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColor.kCourtGreen,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                      elevation: 0,
-                    ),
-                    child: const Text('Xác nhận đặt sân',
-                        style: TextStyle(
-                            color: AppColor.kLineWhite,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14)),
-                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(cumSan.tenCumSan, style: AppText.headlineSm(), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Row(children: [
+                      const Icon(Icons.location_on_outlined, size: 14, color: AppColor.textMuted),
+                      const SizedBox(width: 4),
+                      Expanded(child: Text(cumSan.diaChi, style: AppText.bodySm(), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ]),
+                  ]),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ]),
+              const SizedBox(height: 14),
+              Row(children: [
+                const Expanded(child: Divider()),
+                Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Text('CHI TIẾT LỊCH', style: AppText.labelSm())),
+                const Expanded(child: Divider()),
+              ]),
+              const SizedBox(height: 10),
+              _box(Row(children: [
+                const Icon(Icons.grid_view_rounded, size: 18, color: AppColor.primary),
+                const SizedBox(width: 8),
+                Text('Sân thi đấu', style: AppText.body(color: AppColor.textMuted)),
+                const Spacer(),
+                Text(sel.san.tenSan, style: AppText.headlineSm()),
+              ])),
+              const SizedBox(height: 8),
+              _box(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  const Icon(Icons.calendar_today_rounded, size: 18, color: AppColor.primary),
+                  const SizedBox(width: 8),
+                  Text('Thời gian', style: AppText.body(color: AppColor.textMuted)),
+                  const Spacer(),
+                  SzPill('${Fmt.hoursCount(sel.tongGio)} / $slots khung giờ'),
+                ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  const SizedBox(width: 26),
+                  Expanded(child: Text(Fmt.dateLong(sel.batDau), style: AppText.labelLg())),
+                  const Icon(Icons.schedule_rounded, size: 18, color: AppColor.primary),
+                  const SizedBox(width: 4),
+                  Text(sel.thoiGianHienThi, style: AppText.headlineSm(color: AppColor.primary)),
+                ]),
+              ])),
+              const SizedBox(height: 10),
+              Row(children: [
+                Text('Đơn giá áp dụng:', style: AppText.body(color: AppColor.textMuted)),
+                const Spacer(),
+                Text('${Fmt.money(sel.san.gia)}/giờ', style: AppText.labelLg()),
+              ]),
+            ]),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: const Color(0xFFD7FDDB), borderRadius: BorderRadius.circular(AppRadius.lg)),
+            child: Column(children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Tổng tiền tạm tính', style: AppText.labelLg()),
+                    Text('Áp dụng voucher ở bước thanh toán', style: AppText.bodySm()),
+                  ]),
+                ),
+                Text(Fmt.money(sel.tongTien), style: AppText.stat(size: 26, color: AppColor.primaryDark)),
+              ]),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(AppRadius.sm)),
+                child: Row(children: [
+                  const Icon(Icons.timer_outlined, color: AppColor.pending, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Khung giờ sẽ được giữ cho bạn trong lúc hoàn tất thanh toán ở bước tiếp theo.', style: AppText.bodySm(color: AppColor.text))),
+                ]),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(flex: 2, child: SzButton('Huỷ', kind: SzButtonKind.soft, onPressed: () => Navigator.pop(context))),
+            const SizedBox(width: 10),
+            Expanded(flex: 5, child: SzButton('Xác nhận đặt sân', uppercase: true, trailingIcon: Icons.arrow_forward_rounded, onPressed: onConfirm)),
+          ]),
+        ]),
       ),
     );
   }
 
-  String _fmtHours(double h) =>
-      h == h.truncateToDouble() ? h.toInt().toString() : h.toStringAsFixed(1);
-
-  String _fmtCurrency(double v) {
-    final s = v.toStringAsFixed(0);
-    final buf = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) buf.write('.');
-      buf.write(s[i]);
-    }
-    return '${buf.toString()} đ';
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? valueColor;
-
-  const _DetailRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 32, height: 32,
-          decoration: BoxDecoration(
-            color: AppColor.kMintField,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: AppColor.kCourtGreen, size: 16),
-        ),
-        const SizedBox(width: 10),
-        Text('$label:',
-            style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-        const Spacer(),
-        Text(value,
-            style: TextStyle(
-              color: valueColor ?? AppColor.kTextDark,
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-            )),
-      ],
-    );
-  }
+  Widget _box(Widget child) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(AppRadius.md)),
+        child: child,
+      );
 }

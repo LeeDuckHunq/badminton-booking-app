@@ -20,19 +20,20 @@ class PhieuDatSanApi {
     throw Exception('Không lấy được lịch đặt sân');
   }
 
-  /// Trả về maPhieuDat nếu thành công. Server lấy người đặt từ JWT.
-  static Future<String?> createPhieuDat(CreatePhieuDatModel request) async {
+  /// Tạo phiếu đặt. Server lấy người đặt từ JWT.
+  /// Trả về mã phiếu khi thành công, hoặc thông báo lỗi từ server.
+  static Future<({String? maPhieuDat, String? message})> createPhieuDat(CreatePhieuDatModel request) async {
     try {
       final response = await ApiClient.post('/phieu-dat-san/create', request.toJson());
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        return data['maPhieuDat'] as String?;
+        return (maPhieuDat: data['maPhieuDat'] as String?, message: null);
       }
       debugPrint('createPhieuDat failed ${response.statusCode}: ${response.body}');
-      return null;
+      return (maPhieuDat: null, message: ApiClient.errorMessage(response));
     } catch (e) {
       debugPrint('createPhieuDat error: $e');
-      return null;
+      return (maPhieuDat: null, message: 'Không kết nối được máy chủ');
     }
   }
 
