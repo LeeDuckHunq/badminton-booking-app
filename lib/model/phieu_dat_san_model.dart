@@ -25,14 +25,17 @@ class PhieuDatSanModel {
 
   factory PhieuDatSanModel.fromJson(Map<String, dynamic> json) {
     return PhieuDatSanModel(
-      maPhieuDat: json['maPhieuDat'],
-      maNguoiDung: json['maNguoiDung'],
-      maSan: json['maSan'],
+      maPhieuDat: json['maPhieuDat'] as String? ?? '',
+      // Lịch công khai (/theo-ngay) không trả về người đặt và ngày lập.
+      maNguoiDung: json['maNguoiDung'] as String? ?? '',
+      maSan: json['maSan'] as String? ?? '',
       batDau:  DateTime.parse(json['batDau']).toLocal(),
       ketThuc: DateTime.parse(json['ketThuc']).toLocal(),
-      tongTien: (json['tongTien'] as num).toDouble(),
+      tongTien: (json['tongTien'] as num?)?.toDouble() ?? 0,
       maKhuyenMai: json['maKhuyenMai'],
-      ngayLap: DateTime.parse(json['ngayLap']).toLocal(),
+      ngayLap: json['ngayLap'] == null
+          ? DateTime.parse(json['batDau']).toLocal()
+          : DateTime.parse(json['ngayLap']).toLocal(),
       trangThai: json['trangThai'] ?? 'CHO_XAC_NHAN',
     );
   }

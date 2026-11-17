@@ -1,18 +1,11 @@
 import 'dart:convert';
-import 'package:application/api/server_address.dart';
+import 'package:application/api/api_client.dart';
 import 'package:application/model/khuyen_mai_model.dart';
-import 'package:http/http.dart' as http;
 
 class ClaimVoucherApi {
-  static String get _base => ServerAddress().address;
-
-  static Future<List<KhuyenMaiModel>> getAvailableVouchers(
-      String username) async {
+  static Future<List<KhuyenMaiModel>> getAvailableVouchers(String username) async {
     try {
-      final res = await http.get(
-        Uri.parse('$_base/khuyen-mai/chua-co/$username'),
-        headers: {'Accept': 'application/json'},
-      );
+      final res = await ApiClient.get('/khuyen-mai/chua-co/${Uri.encodeComponent(username)}');
       if (res.statusCode == 200) {
         final List<dynamic> data = jsonDecode(res.body);
         final now = DateTime.now();
@@ -25,22 +18,13 @@ class ClaimVoucherApi {
     return [];
   }
 
+  /// Server luôn nhận voucher cho tài khoản đang đăng nhập (theo JWT).
   static Future<bool> claimVoucher({
     required String username,
     required String maKhuyenMai,
   }) async {
     try {
-      final res = await http.post(
-        Uri.parse('$_base/khuyen-mai/nhan'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'username': username,
-          'maKhuyenMai': maKhuyenMai,
-        }),
-      );
+      final res = await ApiClient.post('/khuyen-mai/nhan', {'maKhuyenMai': maKhuyenMai});
       return res.statusCode == 200 || res.statusCode == 201;
     } catch (_) {
       return false;

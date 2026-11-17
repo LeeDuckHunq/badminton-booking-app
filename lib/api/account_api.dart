@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:application/api/api_client.dart';
 import 'package:application/model/user_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:application/api/server_address.dart';
@@ -6,20 +7,14 @@ import 'package:http/http.dart' as http;
 
 class AccountApi {
   static Future<bool> login(String username, String password) async {
-
-    var futureResponse = http.post(
+    final response = await http.post(
       Uri.parse("${ServerAddress().address}/login"),
-      headers: ({
+      headers: {
         "Accept": "application/json",
-        "Content-Type": "application/json; charset=UTF-8"
-      }),
-      body: jsonEncode({
-        "username": username,
-        "password": password
-      })
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: jsonEncode({"username": username, "password": password}),
     );
-
-    var response = await futureResponse;
 
     if (response.statusCode == 200) {
       try {
@@ -28,7 +23,6 @@ class AccountApi {
         await prefs.setString("jwt_token", data['token'] as String);
         await prefs.setString("username", data['username'] as String? ?? username);
         await prefs.setString("role", data['role'] as String? ?? 'ROLE_USER');
-
       } catch (e) {
         return false;
       }
@@ -37,60 +31,38 @@ class AccountApi {
     return false;
   }
 
+  /// Server luôn tạo tài khoản ROLE_USER; tham số [role] được giữ để tương thích nhưng bị bỏ qua.
   static Future<bool> register(String username, String password, String role,
       String fullName, String email, String phoneNumber) async {
-
-    var futureResponse = http.post(
-        Uri.parse("${ServerAddress().address}/register"),
-        headers: ({
-          "Accept": "application/json",
-          "Content-Type": "application/json; charset=UTF-8"
-        }),
-        body: jsonEncode({
-          "username": username,
-          "password": password,
-          "role": role,
-          "fullName": fullName,
-          "email": email,
-          "phoneNumber": phoneNumber
-        })
+    final response = await http.post(
+      Uri.parse("${ServerAddress().address}/register"),
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: jsonEncode({
+        "username": username,
+        "password": password,
+        "fullName": fullName,
+        "email": email,
+        "phoneNumber": phoneNumber,
+      }),
     );
-
-    var response = await futureResponse;
-
-    if (response.statusCode == 200) {
-      print("Successful!");
-      return true;
-    }
-    return false;
+    return response.statusCode == 200;
   }
-  
+
   static Future<int> amountOfAccount() async {
-    
-    int count = 0;
-    
-    var futureResponse = http.get(
-      Uri.parse("${ServerAddress().address}/user/get-so-luong-user"),
-      headers: ({
-        "Accept": "application/json"
-      })
-    );
-    
-    var response = await futureResponse;
-    
-    if (response.statusCode == 200) {
-      count = int.parse(response.body);
-    }
-    
-    return count;
+    try {
+      final response = await ApiClient.get("/user/get-so-luong-user");
+      if (response.statusCode == 200) {
+        return int.tryParse(response.body) ?? 0;
+      }
+    } catch (_) {}
+    return 0;
   }
 
   static Future<UserModel> getUser(String username) async {
-    final response = await http.get(
-      Uri.parse(
-        '${ServerAddress().address}/user/get-user-info/$username',
-      ),
-    );
+    final response = await ApiClient.get('/user/get-user-info/${Uri.encodeComponent(username)}');
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);

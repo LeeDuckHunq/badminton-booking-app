@@ -1,49 +1,20 @@
 import 'dart:convert';
-
-import 'package:application/api/server_address.dart';
+import 'package:application/api/api_client.dart';
 import 'package:application/model/khuyen_mai_model.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 class KhuyenMaiApi {
-
-  static Future<List<KhuyenMaiModel>>
-  getKhuyenMaiTheoUser(String username) async {
-
+  /// Voucher user đang có, còn hạn và chưa sử dụng.
+  static Future<List<KhuyenMaiModel>> getKhuyenMaiTheoUser(String username) async {
     try {
-      final response = await http.get(
-        Uri.parse(
-          "${ServerAddress().address}"
-              "/khuyen-mai/get-khuyen-mai/$username",
-        ),
-      );
-
+      final response = await ApiClient.get('/khuyen-mai/get-khuyen-mai/${Uri.encodeComponent(username)}');
       if (response.statusCode == 200) {
-
-        List<dynamic> data =
-        jsonDecode(response.body);
-
-        print("STATUS: ${response.statusCode}");
-        print("BODY: ${response.body}");
-
-        print(data.length);
-
-        return data
-            .map(
-              (e) => KhuyenMaiModel
-              .fromJson(e),
-        )
-            .toList();
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((e) => KhuyenMaiModel.fromJson(e)).toList();
       }
-
-      throw Exception(
-        "Lỗi API: ${response.statusCode}",
-      );
-
+      throw Exception("Lỗi API: ${response.statusCode}");
     } catch (e) {
-      print(
-        "Lỗi getKhuyenMaiTheoUser: $e",
-      );
-
+      debugPrint("Lỗi getKhuyenMaiTheoUser: $e");
       return [];
     }
   }

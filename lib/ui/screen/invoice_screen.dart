@@ -7,13 +7,12 @@ import 'package:application/model/hoa_don_request_model.dart';
 import 'package:application/model/khuyen_mai_model.dart';
 import 'package:application/model/user_model.dart';
 import 'package:application/ui/theme/app_color.dart';
-import 'package:application/utils/date_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../invoice/models/invoice_model.dart';
-import '../invoice/services/supabase_storage_service.dart';
+import '../../api/payment_proof_api.dart';
 import '../invoice/widgets/invoice_sections.dart';
 
 class InvoiceScreen extends StatefulWidget {
@@ -25,7 +24,7 @@ class InvoiceScreen extends StatefulWidget {
   const InvoiceScreen({
     super.key,
     required this.booking,
-    required this.maPhieuDat
+    required this.maPhieuDat,
   });
 
   @override
@@ -39,10 +38,10 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   List<BankAccountModel> _bankList = [];
   String? _qrImageUrl;
 
-  bool _isLoadingUser  = true;
+  bool _isLoadingUser = true;
   bool _isLoadingPromo = true;
-  bool _isLoadingBank  = true;
-  bool _isLoadingQr    = true;
+  bool _isLoadingBank = true;
+  bool _isLoadingQr = true;
 
   // ── Promo selection ───────────────────────────────────────────────────────
   String? _selectedMaKhuyenMai;
@@ -86,26 +85,20 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
     try {
       // ── Load User ─────────────────────────
-      final prefs =
-      await SharedPreferences
-          .getInstance();
+      final prefs = await SharedPreferences.getInstance();
 
-      String? username =
-      prefs.getString("username");
+      String? username = prefs.getString("username");
 
       if (username == null) {
-        throw Exception(
-            "Không tìm thấy username");
+        throw Exception("Không tìm thấy username");
       }
 
-      UserModel user =
-      await AccountApi
-          .getUser(username);
+      UserModel user = await AccountApi.getUser(username);
 
       // ── Load khuyến mãi từ API ───────────
-      List<KhuyenMaiModel> promoList =
-      await KhuyenMaiApi
-          .getKhuyenMaiTheoUser(username);
+      List<KhuyenMaiModel> promoList = await KhuyenMaiApi.getKhuyenMaiTheoUser(
+        username,
+      );
 
       print("PROMO COUNT: ${promoList.length}");
 
@@ -119,14 +112,12 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
         const BankAccountModel(
           tenNganHang: 'MBBANK',
           soTaiKhoan: '0383222791',
-          chuTaiKhoan:
-          'LE NGUYEN VIET HUNG',
+          chuTaiKhoan: 'LE NGUYEN VIET HUNG',
         ),
         const BankAccountModel(
           tenNganHang: 'MOMO',
           soTaiKhoan: '0383222791',
-          chuTaiKhoan:
-          'LE NGUYEN VIET HUNG',
+          chuTaiKhoan: 'LE NGUYEN VIET HUNG',
         ),
       ];
 
@@ -147,10 +138,9 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
         // QR
         _qrImageUrl =
-        "https://drive.usercontent.google.com/download?id=153HvUP5xdjyjiBJdEJfVB0bszk0WKNer&export=view&authuser=0";
+            "https://drive.usercontent.google.com/download?id=153HvUP5xdjyjiBJdEJfVB0bszk0WKNer&export=view&authuser=0";
         _isLoadingQr = false;
       });
-
     } catch (e) {
       print("Lỗi load dữ liệu: $e");
 
@@ -175,8 +165,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     return widget.booking.tongTien * (1 - promo.phanTramGiam);
   }
 
-  double get _soTienGiam =>
-      widget.booking.tongTien - _tongTienSauGiam;
+  double get _soTienGiam => widget.booking.tongTien - _tongTienSauGiam;
 
   // ── Pick + upload bill ─────────────────────────────────────────────────────
   Future<void> _pickAndUploadBill() async {
@@ -197,9 +186,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       _billUploadedUrl = null;
     });
 
-    final url = await SupabaseStorageService.uploadBillImage(
-      file: _billFile!,
-    );
+    final url = await PaymentProofApi.upload(file: _billFile!);
 
     if (!mounted) return;
 
@@ -214,8 +201,9 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           content: const Text('❌ Tải ảnh thất bại. Vui lòng thử lại!'),
           backgroundColor: Colors.red[700],
           behavior: SnackBarBehavior.floating,
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       );
     }
@@ -239,21 +227,27 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
               height: 4,
               margin: const EdgeInsets.only(top: 12, bottom: 16),
               decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2)),
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
             ListTile(
               leading: Container(
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                    color: AppColor.kMintField,
-                    borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.camera_alt_outlined,
-                    color: AppColor.kCourtGreen),
+                  color: AppColor.kMintField,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.camera_alt_outlined,
+                  color: AppColor.kCourtGreen,
+                ),
               ),
-              title: const Text('Chụp ảnh',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              title: const Text(
+                'Chụp ảnh',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
             ListTile(
@@ -261,18 +255,21 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                    color: AppColor.kMintField,
-                    borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.photo_library_outlined,
-                    color: AppColor.kCourtGreen),
+                  color: AppColor.kMintField,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.photo_library_outlined,
+                  color: AppColor.kCourtGreen,
+                ),
               ),
-              title: const Text('Chọn từ thư viện',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+              title: const Text(
+                'Chọn từ thư viện',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
-            SizedBox(
-                height:
-                MediaQuery.of(context).padding.bottom + 16),
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
           ],
         ),
       ),
@@ -298,7 +295,9 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Hủy đặt sân?'),
-        content: const Text('Bạn chưa thanh toán. Quay lại sẽ hủy phiếu đặt này.'),
+        content: const Text(
+          'Bạn chưa thanh toán. Quay lại sẽ hủy phiếu đặt này.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -320,10 +319,14 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     if (_billUploadedUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('⚠️ Vui lòng tải lên bill thanh toán trước khi xác nhận'),
+          content: const Text(
+            '⚠️ Vui lòng tải lên bill thanh toán trước khi xác nhận',
+          ),
           backgroundColor: Colors.orange[700],
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       );
       return;
@@ -331,40 +334,42 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
 
     setState(() => _isConfirming = true);
 
-    final now = DateTime.now();
-    final ngayLap = toLocalIso(DateTime.now());
+    // Tổng tiền, mã hoá đơn, ngày lập do server tự tính.
     final request = CreateHoaDonRequest(
-      maHoaDon: 'HD${DateTime.now().millisecondsSinceEpoch}',
       maPhieuDat: widget.maPhieuDat,
       maKhuyenMai: _selectedMaKhuyenMai,
-      tongTien: _tongTienSauGiam,
-      ngayLap: ngayLap,
       billThanhToan: _billUploadedUrl!,
     );
 
-    final success = await HoaDonApi.createHoaDon(request);
+    final result = await HoaDonApi.createHoaDon(request);
 
     if (!mounted) return;
     setState(() => _isConfirming = false);
 
-    if (success) {
+    if (result.success) {
       setState(() => _daDatThanhToan = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('🏸 Đặt sân thành công! Chúng tôi sẽ xác nhận sớm.'),
+          content: const Text(
+            '🏸 Đặt sân thành công! Chúng tôi sẽ xác nhận sớm.',
+          ),
           backgroundColor: AppColor.kCourtGreen,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       );
       Navigator.popUntil(context, (r) => r.isFirst);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('❌ Tạo hóa đơn thất bại. Vui lòng thử lại!'),
+          content: Text('❌ ${result.message ?? 'Tạo hóa đơn thất bại. Vui lòng thử lại!'}'),
           backgroundColor: Colors.red[700],
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       );
     }
@@ -374,21 +379,21 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) _onPopRequested();
-        },
-        child: Scaffold(
-          backgroundColor: const Color(0xFFF4F6F4),
-          body: Column(
-            children: [
-              _buildHeader(),
-              Expanded(child: _buildBody()),
-              _buildBottomBar(),
-              SizedBox(height: MediaQuery.of(context).padding.bottom),
-            ],
-          ),
-        )
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _onPopRequested();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF4F6F4),
+        body: Column(
+          children: [
+            _buildHeader(),
+            Expanded(child: _buildBody()),
+            _buildBottomBar(),
+            SizedBox(height: MediaQuery.of(context).padding.bottom),
+          ],
+        ),
+      ),
     );
   }
 
@@ -408,8 +413,11 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           child: Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                    color: AppColor.kLineWhite, size: 20),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: AppColor.kLineWhite,
+                  size: 20,
+                ),
                 onPressed: () => _onPopRequested(),
               ),
               const Expanded(
@@ -428,16 +436,17 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                     SizedBox(height: 2),
                     Text(
                       'Kiểm tra thông tin và xác nhận',
-                      style: TextStyle(
-                          color: Colors.white70, fontSize: 12.5),
+                      style: TextStyle(color: Colors.white70, fontSize: 12.5),
                     ),
                   ],
                 ),
               ),
               // Invoice badge
               Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: AppColor.kAccentYellow,
                   borderRadius: BorderRadius.circular(10),
@@ -464,8 +473,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         // ── 1. Thông tin người đặt ───────────────────────────────────────
-        UserInfoSection(
-            userInfo: _userInfo, isLoading: _isLoadingUser),
+        UserInfoSection(userInfo: _userInfo, isLoading: _isLoadingUser),
         const SizedBox(height: 20),
 
         // ── 2. Thông tin đặt sân ─────────────────────────────────────────
@@ -482,13 +490,11 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
         const SizedBox(height: 20),
 
         // ── 4. Tài khoản ngân hàng ───────────────────────────────────────
-        BankAccountSection(
-            bankList: _bankList, isLoading: _isLoadingBank),
+        BankAccountSection(bankList: _bankList, isLoading: _isLoadingBank),
         const SizedBox(height: 20),
 
         // ── 5. QR Code ───────────────────────────────────────────────────
-        QrCodeSection(
-            qrImageUrl: _qrImageUrl, isLoading: _isLoadingQr),
+        QrCodeSection(qrImageUrl: _qrImageUrl, isLoading: _isLoadingQr),
         const SizedBox(height: 20),
 
         // ── 6. Upload bill ───────────────────────────────────────────────
@@ -515,14 +521,20 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           // Tiêu đề
           const Row(
             children: [
-              Icon(Icons.receipt_long_rounded,
-                  color: AppColor.kCourtGreen, size: 18),
+              Icon(
+                Icons.receipt_long_rounded,
+                color: AppColor.kCourtGreen,
+                size: 18,
+              ),
               SizedBox(width: 8),
-              Text('Tổng kết thanh toán',
-                  style: TextStyle(
-                      color: AppColor.kTextDark,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14)),
+              Text(
+                'Tổng kết thanh toán',
+                style: TextStyle(
+                  color: AppColor.kTextDark,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -538,13 +550,15 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.local_offer_outlined,
-                        color: Colors.green, size: 13),
+                    const Icon(
+                      Icons.local_offer_outlined,
+                      color: Colors.green,
+                      size: 13,
+                    ),
                     const SizedBox(width: 5),
                     Text(
                       'Khuyến mãi',
-                      style: TextStyle(
-                          color: Colors.grey[600], fontSize: 13),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
                     ),
                   ],
                 ),
@@ -567,12 +581,14 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Tổng thanh toán',
-                  style: TextStyle(
-                    color: AppColor.kTextDark,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 15,
-                  )),
+              const Text(
+                'Tổng thanh toán',
+                style: TextStyle(
+                  color: AppColor.kTextDark,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                ),
+              ),
               Text(
                 _fmtCurrency(_tongTienSauGiam),
                 style: const TextStyle(
@@ -592,13 +608,15 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label,
-            style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-        Text(_fmtCurrency(amount),
-            style: const TextStyle(
-                color: AppColor.kTextDark,
-                fontWeight: FontWeight.w600,
-                fontSize: 13)),
+        Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+        Text(
+          _fmtCurrency(amount),
+          style: const TextStyle(
+            color: AppColor.kTextDark,
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
+        ),
       ],
     );
   }
@@ -627,9 +645,10 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Cần thanh toán',
-                    style:
-                    TextStyle(color: Colors.grey[500], fontSize: 11.5)),
+                Text(
+                  'Cần thanh toán',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 11.5),
+                ),
                 Text(
                   _fmtCurrency(_tongTienSauGiam),
                   style: const TextStyle(
@@ -654,43 +673,42 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                     ? AppColor.kCourtGreen
                     : Colors.grey[300],
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                  borderRadius: BorderRadius.circular(14),
+                ),
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(horizontal: 24),
               ),
               child: _isConfirming
                   ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2.5),
-              )
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2.5,
+                      ),
+                    )
                   : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    hasUpload
-                        ? Icons.check_circle_outline_rounded
-                        : Icons.upload_file_rounded,
-                    color: hasUpload
-                        ? Colors.white
-                        : Colors.grey[500],
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    hasUpload ? 'XÁC NHẬN ĐẶT SÂN' : 'TẢI BILL TRƯỚC',
-                    style: TextStyle(
-                      color: hasUpload
-                          ? Colors.white
-                          : Colors.grey[500],
-                      fontWeight: FontWeight.w900,
-                      fontSize: 13,
-                      letterSpacing: 0.5,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          hasUpload
+                              ? Icons.check_circle_outline_rounded
+                              : Icons.upload_file_rounded,
+                          color: hasUpload ? Colors.white : Colors.grey[500],
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          hasUpload ? 'XÁC NHẬN ĐẶT SÂN' : 'TẢI BILL TRƯỚC',
+                          style: TextStyle(
+                            color: hasUpload ? Colors.white : Colors.grey[500],
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
           ),
         ],

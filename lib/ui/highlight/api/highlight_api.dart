@@ -8,8 +8,6 @@ import 'package:application/ui/highlight/models/hot_court_model.dart';
 import 'package:http/http.dart' as http;
 
 class HighlightApi {
-  static const String _baseUrl =
-      'https://be-badminton-booking-app-production.up.railway.app';
 
   // ── 1. Lấy danh sách cụm sân hot (ranking) ─────────────────────────────
   static Future<List<HotCourtRank>> getHotCourts() async {
@@ -30,7 +28,7 @@ class HighlightApi {
   static Future<CumSanModel?> getCumSanInfo(String maCumSan) async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/cumsan/cum-san-info/$maCumSan'),
+        Uri.parse('${ServerAddress().address}/cumsan/cum-san-info/${Uri.encodeComponent(maCumSan)}'),
         headers: {'Accept': 'application/json'},
       );
       if (response.statusCode == 200) {

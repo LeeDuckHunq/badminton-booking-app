@@ -1,30 +1,18 @@
 import 'dart:convert';
-import 'package:application/api/server_address.dart';
+import 'package:application/api/api_client.dart';
 import 'package:application/model/QRModel.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 class QRApi {
-
-  static Future<QRModel?> getQR(
-      String receiver
-      ) async {
+  static Future<QRModel?> getQR(String receiver) async {
     try {
-      final response = await http.get(
-        Uri.parse(
-          '${ServerAddress().address}/getQR/$receiver',
-        ),
-      );
-
+      final response = await ApiClient.get('/getQR/${Uri.encodeComponent(receiver)}');
       if (response.statusCode == 200) {
-        final data =
-        jsonDecode(response.body);
-
-        return QRModel.fromJson(data);
+        return QRModel.fromJson(jsonDecode(response.body));
       }
-
       return null;
     } catch (e) {
-      print('Loi lay QR: $e');
+      debugPrint('Loi lay QR: $e');
       return null;
     }
   }

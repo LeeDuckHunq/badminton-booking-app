@@ -1,20 +1,14 @@
 // lib/ui/chat/api/chat_api.dart
-
 import 'dart:convert';
-import 'package:application/api/server_address.dart';
+import 'package:application/api/api_client.dart';
 import 'package:application/ui/chat/models/chat_models.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 class ChatApi {
-  static String get _base => ServerAddress().address;
-
   /// Lấy tất cả user (để hiện contact list)
   static Future<List<ChatUser>> getAllUsers() async {
     try {
-      final res = await http.get(
-        Uri.parse('$_base/user/get-all-user'),
-        headers: {'Accept': 'application/json'},
-      );
+      final res = await ApiClient.get('/user/get-all-user');
       if (res.statusCode == 200) {
         final List<dynamic> data = jsonDecode(res.body);
         return data
@@ -26,23 +20,18 @@ class ChatApi {
     return [];
   }
 
-  /// Lấy hoặc tạo phòng chat giữa 2 user — trả về maPhongChat
+  /// Lấy hoặc tạo phòng chat giữa 2 user — trả về maPhongChat.
+  /// Một trong hai username phải là tài khoản đang đăng nhập.
   static Future<String?> getOrCreateRoom({
     required String username1,
     required String username2,
   }) async {
     try {
-      final res = await http.post(
-        Uri.parse('$_base/chat/get-or-create-room'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'username1': username1,
-          'username2': username2,
-        }),
-      );
+      final res = await ApiClient.post('/chat/get-or-create-room', {
+        'username1': username1,
+        'username2': username2,
+      });
+
       if (res.statusCode == 200 || res.statusCode == 201) {
         // API trả về string roomId hoặc JSON object
         final body = res.body.trim();
@@ -51,9 +40,7 @@ class ChatApi {
         }
         try {
           final json = jsonDecode(body);
-          return json['maPhongChat'] as String? ??
-              json['roomId'] as String? ??
-              body;
+          return json['maPhongChat'] as String? ?? json['roomId'] as String? ?? body;
         } catch (_) {
           return body;
         }
@@ -63,60 +50,32 @@ class ChatApi {
   }
 
   /// Lấy tin nhắn của phòng
-  static Future<List<ChatMessage>> getMessages(
-      String maPhongChat) async {
+  static Future<List<ChatMessage>> getMessages(String maPhongChat) async {
     try {
-      final res = await http.get(
-        Uri.parse('$_base/chat/messages/$maPhongChat'),
-        headers: {'Accept': 'application/json'},
-      );
-
+      final res = await ApiClient.get('/chat/messages/${Uri.encodeComponent(maPhongChat)}');
       if (res.statusCode == 200) {
-        print(res.body);
-
         final List<dynamic> data = jsonDecode(res.body);
-
-        final msgs = data.map((e) {
-          print('RAW TIME: ${e['thoiGianGui']}');
-
-          final msg = ChatMessage.fromJson(e);
-
-          print('PARSED TIME: ${msg.thoiGianGui}');
-
-          return msg;
-        }).toList();
-
-        msgs.sort(
-              (a, b) => a.thoiGianGui.compareTo(b.thoiGianGui),
-        );
-
+        final msgs = data.map((e) => ChatMessage.fromJson(e)).toList();
+        msgs.sort((a, b) => a.thoiGianGui.compareTo(b.thoiGianGui));
         return msgs;
       }
     } catch (e) {
-      print(e);
+      debugPrint('getMessages error: $e');
     }
-
     return [];
   }
-  /// Gửi tin nhắn
+
+  /// Gửi tin nhắn (server lấy người gửi từ JWT).
   static Future<bool> sendMessage({
     required String maPhongChat,
     required String usernameNguoiGui,
     required String noiDung,
   }) async {
     try {
-      final res = await http.post(
-        Uri.parse('$_base/chat/send-message'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'maPhongChat': maPhongChat,
-          'usernameNguoiGui': usernameNguoiGui,
-          'noiDung': noiDung,
-        }),
-      );
+      final res = await ApiClient.post('/chat/send-message', {
+        'maPhongChat': maPhongChat,
+        'noiDung': noiDung,
+      });
       return res.statusCode == 200 || res.statusCode == 201;
     } catch (_) {}
     return false;

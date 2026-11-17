@@ -1,14 +1,13 @@
 // lib/ui/account/screens/booking_history_screen.dart
 
 import 'dart:convert';
-import 'package:application/api/server_address.dart';
+import 'package:application/api/api_client.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 
 class BookingHistoryScreen extends StatefulWidget {
   final List<PhieuDatSanModel> phieuList;
@@ -519,11 +518,9 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
 
   Future<void> _fetchHoaDon() async {
     try {
-      print('MA PHIEU DAT: "${widget.phieu.maPhieuDat}"');
-      final uri = Uri.parse(
-          '${ServerAddress().address}/hoa-don/get-hoa-don/${widget.phieu.maPhieuDat}');
-      print('URI: $uri');
-      final res = await http.get(uri);
+      final res = await ApiClient.get(
+          '/hoa-don/get-hoa-don/${Uri.encodeComponent(widget.phieu.maPhieuDat)}');
+      if (!mounted) return;
       if (res.statusCode == 200) {
         final json = jsonDecode(res.body) as Map<String, dynamic>;
         setState(() {
@@ -532,11 +529,12 @@ class _InvoiceDetailSheetState extends State<_InvoiceDetailSheet> {
         });
       } else {
         setState(() {
-          _error   = 'Lỗi ${res.statusCode}';
+          _error   = res.statusCode == 404 ? 'Chưa có hóa đơn' : 'Lỗi ${res.statusCode}';
           _loading = false;
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error   = 'Không thể tải hóa đơn';
         _loading = false;
