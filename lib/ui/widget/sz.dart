@@ -728,6 +728,8 @@ class SzNetworkImage extends StatelessWidget {
       width: width,
       height: height,
       fit: fit,
+      // Web: ảnh không có CORS (vd. Google Drive) thì hiển thị bằng thẻ <img>.
+      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
       errorBuilder: (_, __, ___) => fallback,
       loadingBuilder: (context, child, progress) => progress == null ? child : SzSkeleton(width: width ?? double.infinity, height: height ?? 120, radius: 0),
     );

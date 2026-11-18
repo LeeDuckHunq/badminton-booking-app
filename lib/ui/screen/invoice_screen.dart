@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:application/api/account_api.dart';
 import 'package:application/api/hoa_don_api.dart';
@@ -52,7 +52,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   String? _selectedPromo;
   int _receiverIndex = 0;
 
-  File? _billFile;
+  Uint8List? _billFile;
   String? _billUrl;
   bool _uploading = false;
   bool _confirming = false;
@@ -112,12 +112,14 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     final picked = await ImagePicker().pickImage(source: source, imageQuality: 80, maxWidth: 1600);
     if (picked == null) return;
 
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
     setState(() {
-      _billFile = File(picked.path);
+      _billFile = bytes;
       _uploading = true;
       _billUrl = null;
     });
-    final url = await PaymentProofApi.upload(file: _billFile!);
+    final url = await PaymentProofApi.upload(bytes: bytes, filename: picked.name);
     if (!mounted) return;
     setState(() {
       _billUrl = url;
@@ -419,7 +421,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(color: _billUrl != null ? const Color(0xFFD7FDDB) : AppColor.canvas, borderRadius: BorderRadius.circular(AppRadius.md)),
             child: Row(children: [
-              ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(_billFile!, width: 64, height: 80, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(width: 64, height: 80, child: Icon(Icons.image_outlined)))),
+              ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.memory(_billFile!, width: 64, height: 80, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(width: 64, height: 80, child: Icon(Icons.image_outlined)))),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
