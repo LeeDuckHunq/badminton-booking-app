@@ -7,6 +7,7 @@ import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
 import 'package:application/ui/invoice/models/invoice_model.dart';
 import 'package:application/ui/screen/invoice_screen.dart';
+import 'package:application/ui/review/review_widgets.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:application/ui/theme/app_theme.dart';
 import 'package:application/ui/widget/sz.dart';
@@ -288,7 +289,11 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SzPill('${_sanList.isEmpty ? c.soSan : _sanList.length} sân đang mở', icon: Icons.stadium_outlined),
+            Row(children: [
+              SzPill('${_sanList.isEmpty ? c.soSan : _sanList.length} sân đang mở', icon: Icons.stadium_outlined),
+              const SizedBox(width: 8),
+              RatingPill(score: c.diemDanhGia, count: c.soDanhGia, showEmpty: true, onTap: () => showVenueReviewsSheet(context, c)),
+            ]),
             const SizedBox(height: 8),
             Text(c.tenCumSan, style: AppText.headlineLg(color: AppColor.primary)),
             const SizedBox(height: 6),

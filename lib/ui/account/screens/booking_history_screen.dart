@@ -2,9 +2,11 @@
 import 'dart:convert';
 
 import 'package:application/api/api_client.dart';
+import 'package:application/api/danh_gia_api.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
+import 'package:application/ui/review/review_widgets.dart';
 import 'package:application/ui/screen/booking_schedule_screen.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:application/ui/theme/app_theme.dart';
@@ -35,6 +37,31 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
     ('DA_HUY', 'Đã huỷ', AppColor.danger),
   ];
   String? _status;
+  Map<String, MyReview> _reviews = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReviews();
+  }
+
+  Future<void> _loadReviews() async {
+    final r = await DanhGiaApi.mine();
+    if (mounted) setState(() => _reviews = r);
+  }
+
+  Future<void> _review(PhieuDatSanModel p, CumSanModel? venue) async {
+    final ok = await showWriteReviewSheet(
+      context,
+      maPhieuDat: p.maPhieuDat,
+      venueName: venue?.tenCumSan ?? 'Cụm sân',
+      courtName: widget.sanMap[p.maSan]?.tenSan,
+      existing: _reviews[p.maPhieuDat],
+    );
+    if (!ok || !mounted) return;
+    showSzSnack(context, 'Cảm ơn bạn đã đánh giá!');
+    _loadReviews();
+  }
 
   CumSanModel? _venueOf(PhieuDatSanModel p) {
     final san = widget.sanMap[p.maSan];
@@ -86,6 +113,8 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                       venue: venue,
                       image: venue == null ? null : widget.images[venue.maCumSan],
                       onInvoice: () => showInvoiceSheet(context, p, widget.sanMap[p.maSan], venue),
+                      review: _reviews[p.maPhieuDat],
+                      onReview: () => _review(p, venue),
                     );
                   },
                 ),
@@ -101,8 +130,13 @@ class _BookingTicket extends StatelessWidget {
   final CumSanModel? venue;
   final String? image;
   final VoidCallback onInvoice;
+  final MyReview? review;
+  final VoidCallback onReview;
 
-  const _BookingTicket({required this.phieu, required this.san, required this.venue, required this.image, required this.onInvoice});
+  const _BookingTicket({required this.phieu, required this.san, required this.venue, required this.image, required this.onInvoice, this.review, required this.onReview});
+
+  /// Giống BE: Hoàn thành, hoặc Đã xác nhận và đã qua giờ chơi.
+  bool get _canReview => phieu.trangThai == 'DA_HOAN_THANH' || (phieu.trangThai == 'DA_XAC_NHAN' && phieu.ketThuc.isBefore(DateTime.now()));
 
   @override
   Widget build(BuildContext context) {
@@ -195,6 +229,7 @@ class _BookingTicket extends StatelessWidget {
                       style: AppText.stat(size: 20, color: cancelled ? AppColor.textMuted : AppColor.primaryDark).copyWith(decoration: cancelled ? TextDecoration.lineThrough : null),
                     ),
                   ]),
+                  if (_canReview) ...[const SizedBox(height: 12), _reviewStrip()],
                   const SizedBox(height: 12),
                   _actions(context),
                 ]),
@@ -214,6 +249,55 @@ class _BookingTicket extends StatelessWidget {
           Expanded(child: Text(text, style: AppText.bodySm(color: AppColor.text))),
         ]),
       );
+
+  Widget _reviewStrip() {
+    final r = review;
+    return Material(
+      color: r == null ? const Color(0xFFFFF8D6) : AppColor.canvas,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        onTap: onReview,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+          child: Row(children: [
+            Expanded(
+              child: r == null
+                  ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Bạn thấy sân thế nào?', style: AppText.labelLg()),
+                      const SizedBox(height: 2),
+                      const StarRow(0, size: 18),
+                    ])
+                  : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Text('Đánh giá của bạn', style: AppText.label(color: AppColor.textMuted)),
+                        const SizedBox(width: 6),
+                        StarRow(r.soSao.toDouble(), size: 15),
+                      ]),
+                      if (r.noiDung != null && r.noiDung!.isNotEmpty) Text(r.noiDung!, style: AppText.bodySm(color: AppColor.text), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      if (r.phanHoi != null && r.phanHoi!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Row(children: [
+                            const Icon(Icons.storefront_outlined, size: 13, color: AppColor.primary),
+                            const SizedBox(width: 4),
+                            Expanded(child: Text('Chủ sân: ${r.phanHoi}', style: AppText.bodySm(color: AppColor.primaryDark), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                          ]),
+                        ),
+                    ]),
+            ),
+            const SizedBox(width: 8),
+            r == null
+                ? SzButton.small('Đánh giá', icon: Icons.star_rounded, onPressed: onReview)
+                : Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text('Sửa', style: AppText.label(color: AppColor.primary)),
+                    const Icon(Icons.chevron_right_rounded, size: 18, color: AppColor.primary),
+                  ]),
+          ]),
+        ),
+      ),
+    );
+  }
 
   Widget _actions(BuildContext context) {
     final invoice = SzButton.small('Xem hoá đơn', icon: Icons.receipt_long_outlined, kind: SzButtonKind.soft, expand: true, onPressed: onInvoice);

@@ -1,6 +1,7 @@
 // lib/ui/screen/highlight_screen.dart
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/ui/screen/booking_schedule_screen.dart';
+import 'package:application/ui/review/review_widgets.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:application/ui/theme/app_theme.dart';
 import 'package:application/ui/widget/sz.dart';
@@ -160,6 +161,7 @@ class _TopCard extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Expanded(child: Text(c.tenCumSan, style: AppText.headlineMd(color: AppColor.forest), maxLines: 1, overflow: TextOverflow.ellipsis)),
+              if (c.diemDanhGia != null) ...[RatingInline(score: c.diemDanhGia, count: c.soDanhGia), const SizedBox(width: 8)],
               if (c.soSan > 0) SzPill('${c.soSan} sân'),
             ]),
             const SizedBox(height: 6),
@@ -229,7 +231,10 @@ class _RankRow extends StatelessWidget {
                 Expanded(child: Text(c.diaChi, style: AppText.bodySm(), maxLines: 1, overflow: TextOverflow.ellipsis)),
               ]),
               const SizedBox(height: 4),
-              Text('${Fmt.number(item.rankData.soLuongDat)} lượt đặt', style: AppText.label(color: AppColor.primary)),
+              Row(children: [
+                Text('${Fmt.number(item.rankData.soLuongDat)} lượt đặt', style: AppText.label(color: AppColor.primary)),
+                if (c.diemDanhGia != null) ...[const SizedBox(width: 8), RatingInline(score: c.diemDanhGia, count: c.soDanhGia, size: 13)],
+              ]),
             ]),
           ),
           const SizedBox(width: 8),

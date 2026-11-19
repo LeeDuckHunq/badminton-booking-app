@@ -10,6 +10,8 @@ import 'package:application/api/cum_san_api.dart';
 import 'package:application/api/hinh_anh_san_api.dart';
 import 'package:application/api/phieu_dat_san_api.dart';
 import 'package:application/api/san_api.dart';
+import 'package:application/model/san_model.dart';
+import 'package:application/ui/account/screens/booking_history_screen.dart';
 import 'package:application/ui/chat/screens/conversation_screen.dart';
 import 'package:application/ui/home/widgets/home_bottom_nav.dart';
 import 'package:application/ui/invoice/models/invoice_model.dart';
@@ -62,6 +64,22 @@ class _AsyncPreview extends StatelessWidget {
         return InvoiceScreen(
           maPhieuDat: p.maPhieuDat,
           booking: InvoiceBookingInfo(maPhieuDat: p.maPhieuDat, tenCumSan: venue!.tenCumSan, tenSan: san.tenSan, diaChi: venue.diaChi, batDau: p.batDau, ketThuc: p.ketThuc, tongTien: p.tongTien, giaGio: san.gia),
+        );
+      case 'history':
+        final prefs = await SharedPreferences.getInstance();
+        final bookings = await PhieuDatSanApi.getPhieuDatSanTheoUser(prefs.getString('username')!);
+        final venues = await CumSanApi.getCumSan(100) ?? [];
+        final sanMap = <String, SanModel>{};
+        for (final v in venues) {
+          for (final san in await SanApi.getSanTheoCumSan(v.maCumSan)) {
+            sanMap[san.maSan] = san;
+          }
+        }
+        return BookingHistoryScreen(
+          phieuList: bookings,
+          sanMap: sanMap,
+          cumSanMap: {for (final v in venues) v.maCumSan: v},
+          images: await HinhAnhSanApi.getAllHinhAnhSan(),
         );
       case 'chat':
         final prefs = await SharedPreferences.getInstance();

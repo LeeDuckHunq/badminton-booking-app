@@ -1,5 +1,6 @@
 // lib/ui/home/widgets/venue_card.dart
 import 'package:application/model/cum_san_model.dart';
+import 'package:application/ui/review/review_widgets.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:application/ui/theme/app_theme.dart';
 import 'package:application/ui/widget/sz.dart';
@@ -42,6 +43,12 @@ class VenueCard extends StatelessWidget {
             aspectRatio: 16 / 9,
             child: Stack(fit: StackFit.expand, children: [
               SzNetworkImage(courtImage),
+              if (court.diemDanhGia != null)
+                Positioned(
+                  right: 12,
+                  top: 12,
+                  child: RatingPill(score: court.diemDanhGia, count: court.soDanhGia, onTap: () => showVenueReviewsSheet(context, court)),
+                ),
               Positioned(
                 left: 12,
                 bottom: 12,

@@ -1,6 +1,7 @@
 // lib/ui/screen/search_screen.dart
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/ui/screen/booking_schedule_screen.dart';
+import 'package:application/ui/review/review_widgets.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:application/ui/theme/app_theme.dart';
 import 'package:application/ui/widget/sz.dart';
@@ -215,6 +216,7 @@ class _ResultCard extends StatelessWidget {
                     const Icon(Icons.schedule_rounded, size: 14, color: AppColor.primary),
                     const SizedBox(width: 4),
                     Text(Fmt.hours(court.gioMoCua, court.gioDongCua), style: AppText.label(color: AppColor.primary)),
+                    if (court.diemDanhGia != null) ...[const SizedBox(width: 10), RatingInline(score: court.diemDanhGia, count: court.soDanhGia, size: 14)],
                   ]),
                   if (court.soSan > 0) ...[const SizedBox(height: 6), SzPill('${court.soSan} sân', bold: false)],
                 ]),
