@@ -113,6 +113,7 @@ class _BookingTicket extends StatelessWidget {
     final daysLeft = DateTime(phieu.batDau.year, phieu.batDau.month, phieu.batDau.day).difference(DateTime(now.year, now.month, now.day)).inDays;
 
     final (hintIcon, hintText, hintBg, hintFg) = switch (phieu.trangThai) {
+      'DA_XAC_NHAN' when phieu.isWalkIn && phieu.ketThuc.isAfter(now) => (Icons.storefront_outlined, 'Đặt tại sân · ${phieu.phuongThucLabel}', AppColor.mint, AppColor.primaryDark),
       'CHO_XAC_NHAN' => (Icons.receipt_long_outlined, 'Chờ chủ sân duyệt thanh toán', const Color(0xFFFEF3C7), const Color(0xFFB45309)),
       'DA_XAC_NHAN' when phieu.ketThuc.isAfter(now) => (Icons.alarm_rounded, daysLeft <= 0 ? 'Lịch hôm nay' : 'Lịch sắp tới · Còn $daysLeft ngày', const Color(0xFFDBEAFE), const Color(0xFF1D4ED8)),
       'DA_XAC_NHAN' => (Icons.event_available_rounded, 'Đã qua giờ chơi', const Color(0xFFDBEAFE), const Color(0xFF1D4ED8)),
@@ -307,7 +308,11 @@ class _InvoiceSheetState extends State<_InvoiceSheet> {
         });
       } else {
         setState(() {
-          _error = res.statusCode == 404 ? 'Phiếu đặt này chưa có hoá đơn (chưa thanh toán).' : 'Lỗi ${res.statusCode}';
+          _error = res.statusCode != 404
+              ? 'Lỗi ${res.statusCode}'
+              : widget.phieu.isWalkIn
+                  ? 'Đơn do chủ sân đặt hộ tại sân · Thanh toán: ${widget.phieu.phuongThucLabel}.'
+                  : 'Phiếu đặt này chưa có hoá đơn (chưa thanh toán).';
           _loading = false;
         });
       }

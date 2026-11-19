@@ -11,7 +11,24 @@ class PhieuDatSanModel {
   final DateTime ngayLap;
   final String trangThai;
 
+  /// APP (khách tự đặt) hoặc TAI_SAN (chủ sân đặt hộ).
+  final String nguonDat;
+
+  /// Đơn đặt hộ: TIEN_MAT, CHUYEN_KHOAN, TRA_SAU.
+  final String? phuongThucThanhToan;
+
+  bool get isWalkIn => nguonDat == 'TAI_SAN';
+
+  String get phuongThucLabel => switch (phuongThucThanhToan) {
+        'TIEN_MAT' => 'Tiền mặt',
+        'CHUYEN_KHOAN' => 'Chuyển khoản',
+        'TRA_SAU' => 'Trả sau tại sân',
+        _ => 'Tại sân',
+      };
+
   PhieuDatSanModel({
+    this.nguonDat = 'APP',
+    this.phuongThucThanhToan,
     required this.maPhieuDat,
     required this.maNguoiDung,
     required this.maSan,
@@ -37,6 +54,8 @@ class PhieuDatSanModel {
           ? DateTime.parse(json['batDau']).toLocal()
           : DateTime.parse(json['ngayLap']).toLocal(),
       trangThai: json['trangThai'] ?? 'CHO_XAC_NHAN',
+      nguonDat: json['nguonDat'] as String? ?? 'APP',
+      phuongThucThanhToan: json['phuongThucThanhToan'] as String?,
     );
   }
 
