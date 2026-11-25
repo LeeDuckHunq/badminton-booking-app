@@ -50,7 +50,7 @@ class BookingSelection {
 
   double get tongGio => duration.inMinutes / 60.0;
 
-  double get tongTien => tongGio * san.gia;
+  double get tongTien => san.priceOf(batDau, ketThuc);
 
   String get thoiGianHienThi {
     String fmt(DateTime dt) =>

@@ -235,7 +235,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
             batDau: sel.batDau,
             ketThuc: sel.ketThuc,
             tongTien: sel.tongTien,
-            giaGio: sel.san.gia,
+            giaGio: sel.san.hasTimePricing ? null : sel.san.gia,
           ),
         ),
       ),
@@ -373,6 +373,51 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
     );
   }
 
+  /// Bảng giá công khai, gộp các sân có cùng bảng giá.
+  void _showPriceTable() {
+    final groups = <String, List<SanModel>>{};
+    for (final s in _sanList) {
+      final key = '${s.gia}|${s.bangGia.map((r) => '${r.thu}${r.tuGio}${r.denGio}${r.gia}').join(';')}';
+      (groups[key] ??= []).add(s);
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        builder: (_, controller) => ListView(controller: controller, padding: const EdgeInsets.fromLTRB(20, 8, 20, 24), children: [
+          const SzSheetHandle(),
+          const SzSheetHeader(title: 'Bảng giá theo khung giờ', subtitle: 'Giá mỗi giờ, thay đổi theo ngày và giờ chơi', icon: Icons.price_change_outlined),
+          const SizedBox(height: 14),
+          for (final courts in groups.values) ...[
+            Text(courts.map((c) => c.tenSan).join(', '), style: AppText.headlineSm()),
+            const SizedBox(height: 8),
+            for (final r in courts.first.bangGia) _priceTableRow(r.ten ?? 'Khung giá', '${r.daysLabel} · ${r.tuGio}–${r.denGio}', r.gia, courts.first.gia),
+            _priceTableRow('Giờ còn lại', 'Giá mặc định', courts.first.gia, courts.first.gia),
+            const SizedBox(height: 14),
+          ],
+        ]),
+      ),
+    );
+  }
+
+  Widget _priceTableRow(String title, String subtitle, double gia, double base) {
+    final peak = gia > base, cheap = gia < base;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(color: peak ? const Color(0xFFFFF7E6) : cheap ? const Color(0xFFEEFAF2) : AppColor.canvas, borderRadius: BorderRadius.circular(AppRadius.md)),
+      child: Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: AppText.labelLg()), Text(subtitle, style: AppText.bodySm())])),
+        Text('${Fmt.money(gia)}/h', style: AppText.headlineSm(color: peak ? const Color(0xFFB45309) : AppColor.primaryDark)),
+      ]),
+    );
+  }
+
   Widget _buildLegend() {
     Widget item(Widget swatch, String label, {bool strong = false}) => Row(mainAxisSize: MainAxisSize.min, children: [
           swatch,
@@ -391,7 +436,16 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
           item(box(color: AppColor.primaryDark, border: AppColor.primaryDark, child: const Icon(Icons.check_rounded, size: 13, color: Colors.white)), 'Đang chọn', strong: true),
           item(box(color: const Color(0xFFE2E8F0), border: const Color(0xFFCBD5E1), child: CustomPaint(painter: _HatchPainter())), 'Đã đặt'),
           item(box(color: AppColor.slot, child: const Icon(Icons.lock_rounded, size: 11, color: AppColor.textSubtle)), 'Đã qua'),
+          if (_sanList.any((s) => s.hasTimePricing)) ...[
+            item(box(color: const Color(0xFFFFF7E6), border: const Color(0xFFFCD9A0)), 'Giờ cao điểm'),
+            item(box(color: const Color(0xFFEEFAF2), border: const Color(0xFFA7DFBA)), 'Giờ ưu đãi'),
+          ],
         ]),
+        if (_sanList.any((s) => s.hasTimePricing))
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: SzButton.small('Xem bảng giá theo khung giờ', icon: Icons.price_change_outlined, kind: SzButtonKind.soft, expand: true, onPressed: _showPriceTable),
+          ),
         const SizedBox(height: 12),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -440,7 +494,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                       Flexible(child: Text(san.tenSan, style: AppText.headlineSm(color: san.maSan == _selectedMaSan ? AppColor.primaryDark : AppColor.text), maxLines: 1, overflow: TextOverflow.ellipsis)),
                     ]),
                     const SizedBox(height: 2),
-                    Text('${_compactPrice(san.gia)}/h', style: AppText.label(color: AppColor.primary)),
+                    Text(san.minRate == san.maxRate ? '${_compactPrice(san.gia)}/h' : '${_compactPrice(san.minRate)}–${_compactPrice(san.maxRate)}', style: AppText.label(color: AppColor.primary)),
                   ]),
                 ),
             ]),
@@ -476,7 +530,8 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
                             width: _cellWidth,
                             height: _cellHeight,
                             selected: san.maSan == _selectedMaSan && _selectedStarts.contains(slot.start),
-                            priceLabel: _compactPrice(san.gia / 2),
+                            priceLabel: _compactPrice(san.rateAt(slot.start) / 2),
+                            tier: san.rateAt(slot.start).compareTo(san.gia),
                             onTap: () => _onSlotTap(slot),
                           ),
                         ),
@@ -543,9 +598,12 @@ class _SlotCell extends StatelessWidget {
   final double height;
   final bool selected;
   final String priceLabel;
+
+  /// So với giá mặc định: 1 = cao điểm, -1 = ưu đãi, 0 = thường.
+  final int tier;
   final VoidCallback onTap;
 
-  const _SlotCell({required this.slot, required this.width, required this.height, required this.selected, required this.priceLabel, required this.onTap});
+  const _SlotCell({required this.slot, required this.width, required this.height, required this.selected, required this.priceLabel, this.tier = 0, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -586,8 +644,13 @@ class _SlotCell extends StatelessWidget {
           child: const Icon(Icons.lock_outline_rounded, size: 18, color: AppColor.textSubtle),
         );
       default:
+        final (bg, border, fg) = switch (tier) {
+          1 => (const Color(0xFFFFF7E6), const Color(0xFFFCD9A0), const Color(0xFFB45309)),
+          -1 => (const Color(0xFFEEFAF2), const Color(0xFFA7DFBA), AppColor.primaryDark),
+          _ => (Colors.white, AppColor.border, AppColor.text),
+        };
         return Material(
-          color: Colors.white,
+          color: bg,
           borderRadius: BorderRadius.circular(AppRadius.sm),
           child: InkWell(
             borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -596,8 +659,8 @@ class _SlotCell extends StatelessWidget {
               width: width,
               height: height,
               alignment: Alignment.center,
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(AppRadius.sm), border: Border.all(color: AppColor.border)),
-              child: Text(priceLabel, style: AppText.labelLg()),
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(AppRadius.sm), border: Border.all(color: border)),
+              child: Text(priceLabel, style: AppText.labelLg(color: fg)),
             ),
           ),
         );
@@ -698,11 +761,7 @@ class _ConfirmSheet extends StatelessWidget {
                 ]),
               ])),
               const SizedBox(height: 10),
-              Row(children: [
-                Text('Đơn giá áp dụng:', style: AppText.body(color: AppColor.textMuted)),
-                const Spacer(),
-                Text('${Fmt.money(sel.san.gia)}/giờ', style: AppText.labelLg()),
-              ]),
+              ..._priceRows(sel),
             ]),
           ),
           const SizedBox(height: 12),
@@ -740,6 +799,40 @@ class _ConfirmSheet extends StatelessWidget {
         ]),
       ),
     );
+  }
+
+  /// Đơn giá: một dòng nếu cả lượt cùng giá, ngược lại chia theo từng khung giờ.
+  List<Widget> _priceRows(BookingSelection sel) {
+    final parts = sel.san.breakdown(sel.batDau, sel.ketThuc);
+    if (parts.length <= 1) {
+      final p = parts.isEmpty ? null : parts.first;
+      return [
+        Row(children: [
+          Text('Đơn giá áp dụng:', style: AppText.body(color: AppColor.textMuted)),
+          const Spacer(),
+          Text('${Fmt.money(p?.gia ?? sel.san.gia)}/giờ${p?.ten != null ? ' · ${p!.ten}' : ''}', style: AppText.labelLg()),
+        ]),
+      ];
+    }
+    return [
+      Text('Đơn giá theo khung giờ', style: AppText.body(color: AppColor.textMuted)),
+      const SizedBox(height: 6),
+      for (final p in parts)
+        Container(
+          margin: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: p.gia > sel.san.gia ? const Color(0xFFFFF7E6) : p.gia < sel.san.gia ? const Color(0xFFEEFAF2) : Colors.white,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+          child: Row(children: [
+            Expanded(child: Text('${Fmt.range(p.from, p.to)}${p.ten != null ? ' · ${p.ten}' : ''}', style: AppText.label(color: p.gia > sel.san.gia ? const Color(0xFFB45309) : AppColor.text))),
+            Text('${Fmt.money(p.gia)}/h', style: AppText.bodySm()),
+            const SizedBox(width: 10),
+            Text(Fmt.money(p.amount), style: AppText.labelLg()),
+          ]),
+        ),
+    ];
   }
 
   Widget _box(Widget child) => Container(
