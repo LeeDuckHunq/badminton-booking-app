@@ -11,6 +11,8 @@ import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
 import 'package:application/model/user_model.dart';
 import 'package:application/security/AuthManager.dart';
+import 'package:application/services/app_updater.dart';
+import 'package:application/ui/update/update_screen.dart';
 import 'package:application/ui/account/screens/booking_history_screen.dart';
 import 'package:application/ui/account/screens/voucher_screen.dart';
 import 'package:application/ui/screen/login_screen.dart';
@@ -37,11 +39,13 @@ class _AccountScreenState extends State<AccountScreen> {
   Map<String, String> _images = {};
   bool _loading = true;
   bool _failed = false;
+  InstalledApp? _app;
 
   @override
   void initState() {
     super.initState();
     _load();
+    AppUpdater.installed().then((a) { if (mounted) setState(() => _app = a); });
   }
 
   Future<void> _load() async {
@@ -116,13 +120,21 @@ class _AccountScreenState extends State<AccountScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(color: AppColor.canvas, borderRadius: BorderRadius.circular(AppRadius.md)),
-              child: Column(children: const [
-                SzInfoRow('Phiên bản', 'v1.0.0'),
-                SzInfoRow('Bản dựng', '1'),
-                SzInfoRow('Môi trường', 'Production'),
+              child: Column(children: [
+                SzInfoRow('Phiên bản', 'v${_app?.versionName ?? '1.1.0'}'),
+                SzInfoRow('Bản dựng', '${_app?.build ?? '—'}'),
+                const SzInfoRow('Môi trường', 'Production'),
               ]),
             ),
             const SizedBox(height: 12),
+            if (AppUpdater.supported) ...[
+              SzButton('Kiểm tra cập nhật', icon: Icons.system_update_rounded, expand: true, onPressed: () {
+                final navigator = Navigator.of(context);
+                Navigator.pop(ctx);
+                checkForUpdate(navigator, manual: true, messageContext: context);
+              }),
+              const SizedBox(height: 8),
+            ],
             SzButton('Đóng', expand: true, kind: SzButtonKind.soft, onPressed: () => Navigator.pop(ctx)),
           ]),
         ),
@@ -187,7 +199,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       iconBg: AppColor.canvas,
                       iconColor: AppColor.textMuted,
                       label: 'Phiên bản ứng dụng',
-                      trailing: Text('v1.0.0', style: AppText.bodyLg(color: AppColor.textMuted)),
+                      trailing: Text('v${_app?.versionName ?? '1.1.0'}', style: AppText.bodyLg(color: AppColor.textMuted)),
                       onTap: _showVersion,
                     ),
                   ]),

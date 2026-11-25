@@ -4,6 +4,7 @@ import 'package:application/security/AuthManager.dart';
 import 'package:application/ui/screen/home_screen.dart';
 import 'package:application/ui/screen/login_screen.dart';
 import 'package:application/ui/theme/app_theme.dart';
+import 'package:application/ui/update/update_screen.dart';
 import 'package:flutter/material.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -39,4 +40,7 @@ void main() async {
       home: previewHome() ?? (loggedIn ? const HomeScreen() : const LoginScreen()),
     ),
   );
+
+  // Kiểm tra bản cập nhật (APK) khi mở app.
+  if (previewHome() == null) UpdateWatcher.start(appNavigatorKey);
 }

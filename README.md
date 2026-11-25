@@ -80,6 +80,19 @@ flutter build web --release --dart-define=API_BASE_URL=https://<địa-chỉ-BE>
 
 File APK nằm ở `build/app/outputs/flutter-apk/app-release.apk`. Nếu build Web để đưa lên mạng, domain của web phải được thêm vào biến `CORS_ALLOWED_ORIGINS` của BE.
 
+Không có `android/key.properties` thì APK được ký bằng khoá debug của máy đang build: dùng để test được, nhưng **không cài đè lên bản phát hành** được.
+
+### Phát hành bản mới & tự cập nhật (trưởng nhóm)
+
+App (từ v1.1.0, gói `vn.smashzone.app`) tự hỏi BE `GET /app/phien-ban` khi mở. Có bản mới thì hiện màn hình cập nhật, tải APK hợp với CPU của máy và mở trình cài của Android. Bản cũ hơn "build tối thiểu" sẽ bị bắt buộc cập nhật.
+
+1. Tăng `version:` trong `pubspec.yaml` (ví dụ `1.2.0+3`: tên 1.2.0, build 3). Build phải luôn tăng.
+2. Chạy `bash scripts/release-android.sh`: build APK cho ARM 64-bit và 32-bit (đã ký), chép vào `smashzone-web/public/download/`.
+3. Deploy web khách (file APK lên Cloudflare cùng web).
+4. Dashboard → **Phiên bản app** → "Điền link trên web khách", nhập dung lượng, ghi "Có gì mới", bấm **Phát hành**.
+
+> **Khoá ký** (`smashzone-release.jks` + `key.properties`) không có trên git. Bản gốc lưu ở `D:\SmashZone\keys`, hãy sao lưu thêm (Google Drive cá nhân, USB…). **Mất khoá thì không phát hành bản cập nhật được nữa**: người dùng sẽ phải gỡ app và cài lại.
+
 ## 7. Cấu trúc thư mục
 
 ```

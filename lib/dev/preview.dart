@@ -14,6 +14,8 @@ import 'package:application/api/san_api.dart';
 import 'package:application/model/san_model.dart';
 import 'package:application/ui/account/screens/booking_history_screen.dart';
 import 'package:application/ui/chat/screens/conversation_screen.dart';
+import 'package:application/services/app_updater.dart';
+import 'package:application/ui/update/update_screen.dart';
 import 'package:application/ui/community/create_match_screen.dart';
 import 'package:application/ui/community/group_detail_screen.dart';
 import 'package:application/ui/community/match_detail_screen.dart';
@@ -40,6 +42,21 @@ Widget? previewHome() {
   return switch (name) {
     'login' => const LoginScreen(),
     'register' => const RegisterScreen(),
+    'update' => UpdateScreen(
+        preview: true,
+        installed: const InstalledApp(versionName: '1.0.0', build: 1, abis: ['arm64-v8a']),
+        release: AppRelease(
+          phienBan: '1.1.0',
+          soBuild: 2,
+          buildToiThieu: q['force'] == '1' ? 2 : 0,
+          batBuoc: q['force'] == '1',
+          coBanMoi: true,
+          ngayPhatHanh: DateTime(2026, 11, 25),
+          taiVe: const {'arm64-v8a': 'https://example.com/a.apk'},
+          kichThuoc: const {'arm64-v8a': 20761804},
+          thayDoi: const ['Cộng đồng: ghép trận vãng lai, lập hội nhóm và chat nhóm', 'Giá sân theo khung giờ: cao điểm, cuối tuần, ưu đãi sáng sớm', 'Tự động cập nhật phiên bản mới ngay trong app', 'Sửa lỗi và cải thiện hiệu năng'],
+        ),
+      ),
     'match' => MatchDetailScreen(matchId: q['id']!),
     'group' => GroupDetailScreen(groupId: q['id']!),
     'create-match' => CreateMatchScreen(groupId: q['group']),
