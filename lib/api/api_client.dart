@@ -46,6 +46,16 @@ class ApiClient {
     return res;
   }
 
+  static Future<http.Response> put(String path, Object? body) async {
+    final res = await http.put(
+      uri(path),
+      headers: await headers(json: true),
+      body: jsonEncode(body),
+    );
+    await checkUnauthorized(res);
+    return res;
+  }
+
   static Future<http.Response> delete(String path) async {
     final res = await http.delete(uri(path), headers: await headers());
     await checkUnauthorized(res);

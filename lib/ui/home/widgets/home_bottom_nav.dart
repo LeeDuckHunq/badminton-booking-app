@@ -3,7 +3,7 @@ import 'package:application/ui/theme/app_color.dart';
 import 'package:application/ui/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
-enum HomeNavTab { home, chat, explore, highlight, account }
+enum HomeNavTab { home, community, chat, explore, account }
 
 /// Thanh tab dưới 5 mục.
 class HomeBottomNav extends StatelessWidget {
@@ -14,9 +14,9 @@ class HomeBottomNav extends StatelessWidget {
 
   static const _tabs = [
     (HomeNavTab.home, Icons.home_outlined, Icons.home_rounded, 'Trang chủ'),
+    (HomeNavTab.community, Icons.groups_outlined, Icons.groups_rounded, 'Cộng đồng'),
     (HomeNavTab.chat, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Tin nhắn'),
     (HomeNavTab.explore, Icons.confirmation_number_outlined, Icons.confirmation_number_rounded, 'Khám phá'),
-    (HomeNavTab.highlight, Icons.emoji_events_outlined, Icons.emoji_events_rounded, 'Nổi bật'),
     (HomeNavTab.account, Icons.person_outline_rounded, Icons.person_rounded, 'Tài khoản'),
   ];
 
@@ -36,7 +36,7 @@ class HomeBottomNav extends StatelessWidget {
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
                       decoration: BoxDecoration(color: tab == currentTab ? AppColor.mint : Colors.transparent, borderRadius: BorderRadius.circular(999)),
                       child: Icon(tab == currentTab ? activeIcon : icon, size: 24, color: tab == currentTab ? AppColor.primary : AppColor.textMuted),
                     ),

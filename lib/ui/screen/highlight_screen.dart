@@ -12,7 +12,10 @@ import '../highlight/models/hot_court_model.dart';
 
 /// M14 – Bảng xếp hạng cụm sân được đặt nhiều nhất (tab Nổi bật).
 class HighlightScreen extends StatefulWidget {
-  const HighlightScreen({super.key});
+  /// Mở như màn con (có nút quay lại) thay vì tab.
+  final bool standalone;
+
+  const HighlightScreen({super.key, this.standalone = false});
 
   @override
   State<HighlightScreen> createState() => _HighlightScreenState();
@@ -60,7 +63,7 @@ class _HighlightScreenState extends State<HighlightScreen> with AutomaticKeepAli
     super.build(context);
     return Scaffold(
       body: Column(children: [
-        const SzBrandHeader(subtitle: 'Nổi bật'),
+        if (widget.standalone) const SzTopBar(title: 'Sân nổi bật', subtitle: 'Bảng xếp hạng cụm sân') else const SzBrandHeader(subtitle: 'Nổi bật'),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _load,

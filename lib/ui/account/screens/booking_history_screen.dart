@@ -2,7 +2,10 @@
 import 'dart:convert';
 
 import 'package:application/api/api_client.dart';
+import 'package:application/api/community_api.dart';
 import 'package:application/api/danh_gia_api.dart';
+import 'package:application/ui/community/create_match_screen.dart';
+import 'package:application/ui/community/match_detail_screen.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
@@ -300,6 +303,22 @@ class _BookingTicket extends StatelessWidget {
   }
 
   Widget _actions(BuildContext context) {
+    final base = _baseActions(context);
+    final canInvite = (phieu.trangThai == 'CHO_XAC_NHAN' || phieu.trangThai == 'DA_XAC_NHAN') && phieu.batDau.isAfter(DateTime.now());
+    if (!canInvite) return base;
+    return Column(children: [
+      base,
+      const SizedBox(height: 8),
+      SzButton.small('Rủ người chơi / mở trận', icon: Icons.groups_rounded, kind: SzButtonKind.outline, expand: true, onPressed: () async {
+        final created = await Navigator.push<MatchInfo>(context, MaterialPageRoute(builder: (_) => CreateMatchScreen(bookingId: phieu.maPhieuDat)));
+        if (created != null && context.mounted) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => MatchDetailScreen(matchId: created.maTran)));
+        }
+      }),
+    ]);
+  }
+
+  Widget _baseActions(BuildContext context) {
     final invoice = SzButton.small('Xem hoá đơn', icon: Icons.receipt_long_outlined, kind: SzButtonKind.soft, expand: true, onPressed: onInvoice);
     switch (phieu.trangThai) {
       case 'DA_XAC_NHAN':

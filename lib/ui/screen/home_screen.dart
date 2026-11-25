@@ -7,6 +7,7 @@ import 'package:application/model/cum_san_model.dart';
 import 'package:application/services/distance_service.dart';
 import 'package:application/ui/screen/ClaimVoucherScreen.dart';
 import 'package:application/ui/screen/account_screen.dart';
+import 'package:application/ui/community/community_screen.dart';
 import 'package:application/ui/screen/booking_schedule_screen.dart';
 import 'package:application/ui/screen/chat_screen.dart';
 import 'package:application/ui/screen/favorite_list_screen.dart';
@@ -228,9 +229,9 @@ class _HomeScreenState extends State<HomeScreen> {
         index: _currentTab.index,
         children: [
           _buildHomeTab(),
+          const CommunityScreen(),
           const ChatScreen(),
           const ClaimVoucherScreen(),
-          const HighlightScreen(),
           const AccountScreen(),
         ],
       ),
@@ -277,6 +278,11 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildSearchRow(),
               const SizedBox(height: 16),
               _PromoBanner(onFilterTap: _openFilter),
+              const SizedBox(height: 12),
+              _HomeLinks(
+                onCommunity: () => setState(() => _currentTab = HomeNavTab.community),
+                onHighlight: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HighlightScreen(standalone: true))),
+              ),
               const SizedBox(height: 16),
               _buildQuickChips(),
               if (!_filter.isEmpty) _buildActiveFilter(list.length),
@@ -419,6 +425,39 @@ class _HomeScreenState extends State<HomeScreen> {
               Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, 16), child: SzSkeleton(width: 260, height: 14)),
             ]),
           ),
+        ),
+      );
+}
+
+/// Lối vào Cộng đồng (ghép trận) và Sân nổi bật.
+class _HomeLinks extends StatelessWidget {
+  final VoidCallback onCommunity;
+  final VoidCallback onHighlight;
+  const _HomeLinks({required this.onCommunity, required this.onHighlight});
+
+  Widget _tile(IconData icon, String title, String subtitle, Gradient gradient, Color iconColor, VoidCallback onTap) => Expanded(
+        child: SzCard(
+          padding: const EdgeInsets.all(12),
+          onTap: onTap,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(width: 40, height: 40, decoration: BoxDecoration(gradient: gradient, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: iconColor, size: 22)),
+            const SizedBox(height: 10),
+            Text(title, style: AppText.headlineSm()),
+            const SizedBox(height: 2),
+            Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.bodySm()),
+          ]),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            _tile(Icons.sports_tennis_rounded, 'Ghép trận', 'Tìm kèo vãng lai, lập hội nhóm', const LinearGradient(colors: [AppColor.primary, AppColor.forest]), Colors.white, onCommunity),
+            const SizedBox(width: 12),
+            _tile(Icons.emoji_events_rounded, 'Sân nổi bật', 'Cụm sân được đặt nhiều nhất', const LinearGradient(colors: [AppColor.accent, Color(0xFFF59E0B)]), AppColor.forest, onHighlight),
+          ]),
         ),
       );
 }

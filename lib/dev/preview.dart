@@ -5,6 +5,7 @@
 // Dùng trên web: http://host/?preview=<màn>&...  ví dụ:
 //   ?preview=home&tab=3            ?preview=schedule&venue=CS_123
 //   ?preview=invoice&booking=PD_x  ?preview=chat&peer=hoanganh
+//   ?preview=match&id=TR_x         ?preview=group&id=NH_x  ?preview=create-match
 import 'package:application/api/chat_api.dart';
 import 'package:application/api/cum_san_api.dart';
 import 'package:application/api/hinh_anh_san_api.dart';
@@ -13,6 +14,9 @@ import 'package:application/api/san_api.dart';
 import 'package:application/model/san_model.dart';
 import 'package:application/ui/account/screens/booking_history_screen.dart';
 import 'package:application/ui/chat/screens/conversation_screen.dart';
+import 'package:application/ui/community/create_match_screen.dart';
+import 'package:application/ui/community/group_detail_screen.dart';
+import 'package:application/ui/community/match_detail_screen.dart';
 import 'package:application/ui/home/widgets/home_bottom_nav.dart';
 import 'package:application/ui/invoice/models/invoice_model.dart';
 import 'package:application/ui/screen/booking_schedule_screen.dart';
@@ -36,6 +40,9 @@ Widget? previewHome() {
   return switch (name) {
     'login' => const LoginScreen(),
     'register' => const RegisterScreen(),
+    'match' => MatchDetailScreen(matchId: q['id']!),
+    'group' => GroupDetailScreen(groupId: q['id']!),
+    'create-match' => CreateMatchScreen(groupId: q['group']),
     'home' => HomeScreen(initialTab: HomeNavTab.values[int.tryParse(q['tab'] ?? '0') ?? 0]),
     _ => _AsyncPreview(name: name, params: q),
   };
