@@ -33,6 +33,7 @@ to_docker() { if command -v cygpath >/dev/null; then cygpath -m "$1"; else echo 
 MSYS_NO_PATHCONV=1 docker run --rm \
   -v "$(to_docker "$APP_DIR"):/src:ro" \
   -v sz-gradle:/root/.gradle -v sz-pub:/root/.pub-cache \
+  -v sz-sdk-platforms:/opt/android-sdk-linux/platforms -v sz-sdk-ndk:/opt/android-sdk-linux/ndk \
   -v "$(to_docker "$OUT"):/out" \
   ghcr.io/cirruslabs/flutter:3.38.7 bash -c '
     set -e
