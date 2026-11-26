@@ -17,7 +17,21 @@ class PhieuDatSanModel {
   /// Đơn đặt hộ: TIEN_MAT, CHUYEN_KHOAN, TRA_SAU.
   final String? phuongThucThanhToan;
 
+  /// Khách xin huỷ: CHO_XU_LY, DONG_Y, TU_CHOI (null = chưa xin).
+  final String? yeuCauHuy;
+  final String? lyDoHuy;
+  final String? phanHoiHuy;
+
+  /// Chủ sân đổi sân: sân cũ + lý do.
+  final String? maSanCu;
+  final String? lyDoDoiSan;
+
   bool get isWalkIn => nguonDat == 'TAI_SAN';
+  bool get cancelPending => yeuCauHuy == 'CHO_XU_LY' && trangThai != 'DA_HUY';
+
+  /// Khách xin huỷ được: đơn đã xác nhận (khách tự đặt), còn hơn 30 phút tới giờ chơi, chưa có yêu cầu đang chờ.
+  bool get canRequestCancel =>
+      trangThai == 'DA_XAC_NHAN' && !isWalkIn && !cancelPending && batDau.difference(DateTime.now()).inMinutes > 30;
 
   String get phuongThucLabel => switch (phuongThucThanhToan) {
         'TIEN_MAT' => 'Tiền mặt',
@@ -29,6 +43,11 @@ class PhieuDatSanModel {
   PhieuDatSanModel({
     this.nguonDat = 'APP',
     this.phuongThucThanhToan,
+    this.yeuCauHuy,
+    this.lyDoHuy,
+    this.phanHoiHuy,
+    this.maSanCu,
+    this.lyDoDoiSan,
     required this.maPhieuDat,
     required this.maNguoiDung,
     required this.maSan,
@@ -56,6 +75,11 @@ class PhieuDatSanModel {
       trangThai: json['trangThai'] ?? 'CHO_XAC_NHAN',
       nguonDat: json['nguonDat'] as String? ?? 'APP',
       phuongThucThanhToan: json['phuongThucThanhToan'] as String?,
+      yeuCauHuy: json['yeuCauHuy'] as String?,
+      lyDoHuy: json['lyDoHuy'] as String?,
+      phanHoiHuy: json['phanHoiHuy'] as String?,
+      maSanCu: json['maSanCu'] as String?,
+      lyDoDoiSan: json['lyDoDoiSan'] as String?,
     );
   }
 

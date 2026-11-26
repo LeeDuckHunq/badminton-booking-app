@@ -16,6 +16,7 @@ import 'package:application/ui/account/screens/booking_history_screen.dart';
 import 'package:application/ui/chat/screens/conversation_screen.dart';
 import 'package:application/services/app_updater.dart';
 import 'package:application/ui/update/update_screen.dart';
+import 'package:application/ui/notify/notifications_screen.dart';
 import 'package:application/ui/community/create_match_screen.dart';
 import 'package:application/ui/community/group_detail_screen.dart';
 import 'package:application/ui/community/match_detail_screen.dart';
@@ -60,6 +61,8 @@ Widget? previewHome() {
     'match' => MatchDetailScreen(matchId: q['id']!),
     'group' => GroupDetailScreen(groupId: q['id']!),
     'create-match' => CreateMatchScreen(groupId: q['group']),
+    'notifications' => const NotificationsScreen(),
+    'history-focus' => BookingHistoryScreen.loader(focusId: q['booking']),
     'home' => HomeScreen(initialTab: HomeNavTab.values[int.tryParse(q['tab'] ?? '0') ?? 0]),
     _ => _AsyncPreview(name: name, params: q),
   };

@@ -22,6 +22,9 @@ class CumSanModel {
 
   int soDanhGia;
 
+  /// Tài khoản chủ sân (để nhắn tin).
+  String? ownerUsername;
+
   CumSanModel({
     required this.maCumSan,
     required this.tenCumSan,
@@ -35,6 +38,7 @@ class CumSanModel {
     this.soSan = 0,
     this.diemDanhGia,
     this.soDanhGia = 0,
+    this.ownerUsername,
   });
 
   factory CumSanModel.fromJson(Map<String, dynamic> json) {
@@ -51,6 +55,7 @@ class CumSanModel {
       soSan: (json['soSan'] as num?)?.toInt() ?? 0,
       diemDanhGia: (json['diemDanhGia'] as num?)?.toDouble(),
       soDanhGia: (json['soDanhGia'] as num?)?.toInt() ?? 0,
+      ownerUsername: json['ownerUsername'] as String?,
     );
   }
 

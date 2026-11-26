@@ -63,4 +63,6 @@ flutter {
 dependencies {
     // FileProvider để mở trình cài APK cập nhật
     implementation("androidx.core:core:1.13.1")
+    // Hỏi thông báo mới khi app ở nền
+    implementation("androidx.work:work-runtime:2.9.1")
 }

@@ -1,6 +1,7 @@
 import 'package:application/api/api_client.dart';
 import 'package:application/dev/preview.dart';
 import 'package:application/security/AuthManager.dart';
+import 'package:application/services/notification_center.dart';
 import 'package:application/ui/screen/home_screen.dart';
 import 'package:application/ui/screen/login_screen.dart';
 import 'package:application/ui/theme/app_theme.dart';
@@ -13,7 +14,10 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Token hết hạn / tài khoản bị khoá → đăng xuất và quay về màn hình đăng nhập.
+  NotificationCenter.instance.attach(appNavigatorKey);
+
   ApiClient.onUnauthorized = () async {
+    await NotificationCenter.instance.stop();
     await AuthManager.logout();
     final navigator = appNavigatorKey.currentState;
     if (navigator == null) return;

@@ -1,5 +1,6 @@
 // lib/ui/screen/account_screen.dart
 import 'package:application/api/account_api.dart';
+import 'package:application/services/notification_center.dart';
 import 'package:application/api/cum_san_api.dart';
 import 'package:application/api/hinh_anh_san_api.dart';
 import 'package:application/api/khuyen_mai_api.dart';
@@ -99,6 +100,7 @@ class _AccountScreenState extends State<AccountScreen> {
   Future<void> _logout() async {
     final ok = await showSzConfirm(context, title: 'Đăng xuất?', message: 'Bạn có chắc muốn đăng xuất khỏi SmashZone?', confirmLabel: 'Đăng xuất', icon: Icons.logout_rounded, destructive: true);
     if (!ok || !mounted) return;
+    await NotificationCenter.instance.stop();
     await AuthManager.logout();
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
@@ -121,7 +123,7 @@ class _AccountScreenState extends State<AccountScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(color: AppColor.canvas, borderRadius: BorderRadius.circular(AppRadius.md)),
               child: Column(children: [
-                SzInfoRow('Phiên bản', 'v${_app?.versionName ?? '1.1.0'}'),
+                SzInfoRow('Phiên bản', 'v${_app?.versionName ?? '1.2.0'}'),
                 SzInfoRow('Bản dựng', '${_app?.build ?? '—'}'),
                 const SzInfoRow('Môi trường', 'Production'),
               ]),
@@ -199,7 +201,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       iconBg: AppColor.canvas,
                       iconColor: AppColor.textMuted,
                       label: 'Phiên bản ứng dụng',
-                      trailing: Text('v${_app?.versionName ?? '1.1.0'}', style: AppText.bodyLg(color: AppColor.textMuted)),
+                      trailing: Text('v${_app?.versionName ?? '1.2.0'}', style: AppText.bodyLg(color: AppColor.textMuted)),
                       onTap: _showVersion,
                     ),
                   ]),

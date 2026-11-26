@@ -56,4 +56,28 @@ class PhieuDatSanApi {
     throw Exception(ApiClient.errorMessage(response) ??
         'Xóa phiếu đặt thất bại (${response.statusCode})');
   }
+
+  /// Khách xin huỷ lượt đã xác nhận (trước giờ chơi ≥ 30 phút). Máy chủ nhắn cho chủ sân và trả về cách liên hệ.
+  static Future<({bool ok, String? message, Map<String, dynamic>? lienHe})> requestCancel(String maPhieuDat, String lyDo) async {
+    try {
+      final res = await ApiClient.post('/phieu-dat-san/${Uri.encodeComponent(maPhieuDat)}/yeu-cau-huy', {'lyDo': lyDo});
+      if (res.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+        return (ok: true, message: null, lienHe: data['lienHe'] as Map<String, dynamic>?);
+      }
+      return (ok: false, message: ApiClient.errorMessage(res) ?? 'Không gửi được yêu cầu huỷ', lienHe: null);
+    } catch (_) {
+      return (ok: false, message: 'Không kết nối được máy chủ', lienHe: null);
+    }
+  }
+
+  /// Rút lại yêu cầu huỷ. Trả về null nếu thành công, ngược lại là thông báo lỗi.
+  static Future<String?> withdrawCancel(String maPhieuDat) async {
+    try {
+      final res = await ApiClient.delete('/phieu-dat-san/${Uri.encodeComponent(maPhieuDat)}/yeu-cau-huy');
+      return res.statusCode == 200 ? null : (ApiClient.errorMessage(res) ?? 'Không rút được yêu cầu');
+    } catch (_) {
+      return 'Không kết nối được máy chủ';
+    }
+  }
 }

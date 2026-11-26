@@ -1,6 +1,7 @@
 // Bộ component dùng chung theo design system "SmashZone Athletic Modern".
 import 'package:application/ui/theme/app_color.dart';
 import 'package:application/ui/theme/app_theme.dart';
+import 'package:application/ui/notify/notifications_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -375,8 +376,9 @@ class SzBrandHeader extends StatelessWidget {
   final String? userName;
   final VoidCallback? onAvatarTap;
   final List<Widget> actions;
+  final bool showBell;
 
-  const SzBrandHeader({super.key, required this.subtitle, this.userName, this.onAvatarTap, this.actions = const []});
+  const SzBrandHeader({super.key, required this.subtitle, this.userName, this.onAvatarTap, this.actions = const [], this.showBell = true});
 
   @override
   Widget build(BuildContext context) {
@@ -393,6 +395,7 @@ class SzBrandHeader extends StatelessWidget {
           ]),
         ),
         ...actions,
+        if (showBell) const NotificationBell(),
         GestureDetector(
           onTap: onAvatarTap,
           child: userName == null || userName!.isEmpty

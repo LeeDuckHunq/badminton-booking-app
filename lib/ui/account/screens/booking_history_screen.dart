@@ -3,7 +3,12 @@ import 'dart:convert';
 
 import 'package:application/api/api_client.dart';
 import 'package:application/api/community_api.dart';
+import 'package:application/api/cum_san_api.dart';
 import 'package:application/api/danh_gia_api.dart';
+import 'package:application/api/hinh_anh_san_api.dart';
+import 'package:application/api/phieu_dat_san_api.dart';
+import 'package:application/api/san_api.dart';
+import 'package:application/ui/account/screens/cancel_request_sheet.dart';
 import 'package:application/ui/community/create_match_screen.dart';
 import 'package:application/ui/community/match_detail_screen.dart';
 import 'package:application/model/cum_san_model.dart';
@@ -16,6 +21,7 @@ import 'package:application/ui/theme/app_theme.dart';
 import 'package:application/ui/widget/sz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// M16 – Sân đã đặt (lịch sử đặt sân).
@@ -25,7 +31,13 @@ class BookingHistoryScreen extends StatefulWidget {
   final Map<String, CumSanModel> cumSanMap;
   final Map<String, String> images;
 
-  const BookingHistoryScreen({super.key, required this.phieuList, required this.sanMap, required this.cumSanMap, this.images = const {}});
+  /// Mở từ thông báo: phiếu này được đưa lên đầu và làm nổi bật.
+  final String? focusId;
+
+  const BookingHistoryScreen({super.key, required this.phieuList, required this.sanMap, required this.cumSanMap, this.images = const {}, this.focusId});
+
+  /// Tự tải dữ liệu (dùng khi mở từ thông báo).
+  static Widget loader({String? focusId}) => _BookingHistoryLoader(focusId: focusId);
 
   @override
   State<BookingHistoryScreen> createState() => _BookingHistoryScreenState();
@@ -41,11 +53,40 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
   ];
   String? _status;
   Map<String, MyReview> _reviews = {};
+  late List<PhieuDatSanModel> _list = widget.phieuList;
+  String? _flash;
 
   @override
   void initState() {
     super.initState();
     _loadReviews();
+    _flash = widget.focusId;
+    if (_flash != null) Future.delayed(const Duration(milliseconds: 2600), () => mounted ? setState(() => _flash = null) : null);
+  }
+
+  /// Tải lại danh sách phiếu (sau khi xin huỷ / rút yêu cầu).
+  Future<void> _reload() async {
+    final prefs = await SharedPreferences.getInstance();
+    final username = prefs.getString('username') ?? '';
+    if (username.isEmpty) return;
+    try {
+      final fresh = await PhieuDatSanApi.getPhieuDatSanTheoUser(username);
+      if (mounted) setState(() => _list = fresh);
+    } catch (_) {}
+  }
+
+  Future<void> _requestCancel(PhieuDatSanModel p, CumSanModel? venue) async {
+    await showCancelRequestSheet(context, phieu: p, venue: venue, courtName: widget.sanMap[p.maSan]?.tenSan);
+    await _reload();
+  }
+
+  Future<void> _withdraw(PhieuDatSanModel p) async {
+    final ok = await showSzConfirm(context, title: 'Rút yêu cầu huỷ?', message: 'Bạn vẫn giữ lượt đặt này và sẽ ra sân như đã hẹn.', confirmLabel: 'Rút yêu cầu', icon: Icons.undo_rounded);
+    if (!ok || !mounted) return;
+    final err = await PhieuDatSanApi.withdrawCancel(p.maPhieuDat);
+    if (!mounted) return;
+    showSzSnack(context, err ?? 'Đã rút yêu cầu huỷ, lượt đặt vẫn được giữ', type: err == null ? SzToast.success : SzToast.error);
+    _reload();
   }
 
   Future<void> _loadReviews() async {
@@ -73,7 +114,12 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final sorted = [...widget.phieuList]..sort((a, b) => b.batDau.compareTo(a.batDau));
+    final sorted = [..._list]..sort((a, b) {
+        // Phiếu mở từ thông báo lên đầu.
+        if (a.maPhieuDat == widget.focusId) return -1;
+        if (b.maPhieuDat == widget.focusId) return 1;
+        return b.batDau.compareTo(a.batDau);
+      });
     final list = _status == null ? sorted : sorted.where((p) => p.trangThai == _status).toList();
 
     return Scaffold(
@@ -87,7 +133,7 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             children: [
               for (final (code, label, dot) in _filters) ...[
-                SzChip(label, dot: dot, count: code == null ? widget.phieuList.length : widget.phieuList.where((p) => p.trangThai == code).length, selected: _status == code, onTap: () => setState(() => _status = code)),
+                SzChip(label, dot: dot, count: code == null ? _list.length : _list.where((p) => p.trangThai == code).length, selected: _status == code, onTap: () => setState(() => _status = code)),
                 const SizedBox(width: 8),
               ],
             ],
@@ -118,6 +164,11 @@ class _BookingHistoryScreenState extends State<BookingHistoryScreen> {
                       onInvoice: () => showInvoiceSheet(context, p, widget.sanMap[p.maSan], venue),
                       review: _reviews[p.maPhieuDat],
                       onReview: () => _review(p, venue),
+                      oldCourtName: p.maSanCu == null ? null : widget.sanMap[p.maSanCu]?.tenSan,
+                      highlight: _flash == p.maPhieuDat,
+                      onRequestCancel: () => _requestCancel(p, venue),
+                      onWithdraw: () => _withdraw(p),
+                      onContact: () => showOwnerContactSheet(context, OwnerContact.fromVenue(venue)),
                     );
                   },
                 ),
@@ -135,8 +186,26 @@ class _BookingTicket extends StatelessWidget {
   final VoidCallback onInvoice;
   final MyReview? review;
   final VoidCallback onReview;
+  final String? oldCourtName;
+  final bool highlight;
+  final VoidCallback onRequestCancel;
+  final VoidCallback onWithdraw;
+  final VoidCallback onContact;
 
-  const _BookingTicket({required this.phieu, required this.san, required this.venue, required this.image, required this.onInvoice, this.review, required this.onReview});
+  const _BookingTicket({
+    required this.phieu,
+    required this.san,
+    required this.venue,
+    required this.image,
+    required this.onInvoice,
+    this.review,
+    required this.onReview,
+    this.oldCourtName,
+    this.highlight = false,
+    required this.onRequestCancel,
+    required this.onWithdraw,
+    required this.onContact,
+  });
 
   /// Giống BE: Hoàn thành, hoặc Đã xác nhận và đã qua giờ chơi.
   bool get _canReview => phieu.trangThai == 'DA_HOAN_THANH' || (phieu.trangThai == 'DA_XAC_NHAN' && phieu.ketThuc.isBefore(DateTime.now()));
@@ -151,17 +220,24 @@ class _BookingTicket extends StatelessWidget {
 
     final (hintIcon, hintText, hintBg, hintFg) = switch (phieu.trangThai) {
       'DA_XAC_NHAN' when phieu.isWalkIn && phieu.ketThuc.isAfter(now) => (Icons.storefront_outlined, 'Đặt tại sân · ${phieu.phuongThucLabel}', AppColor.mint, AppColor.primaryDark),
+      _ when phieu.cancelPending => (Icons.event_busy_rounded, 'Đang chờ chủ sân duyệt huỷ', const Color(0xFFFEF3C7), const Color(0xFFB45309)),
       'CHO_XAC_NHAN' => (Icons.receipt_long_outlined, 'Chờ chủ sân duyệt thanh toán', const Color(0xFFFEF3C7), const Color(0xFFB45309)),
       'DA_XAC_NHAN' when phieu.ketThuc.isAfter(now) => (Icons.alarm_rounded, daysLeft <= 0 ? 'Lịch hôm nay' : 'Lịch sắp tới · Còn $daysLeft ngày', const Color(0xFFDBEAFE), const Color(0xFF1D4ED8)),
       'DA_XAC_NHAN' => (Icons.event_available_rounded, 'Đã qua giờ chơi', const Color(0xFFDBEAFE), const Color(0xFF1D4ED8)),
       'DA_HOAN_THANH' => (Icons.sports_score_rounded, 'Đã kết thúc lượt chơi', const Color(0xFFDCFCE7), const Color(0xFF15803D)),
-      'DA_HUY' => (Icons.info_outline_rounded, 'Đơn đã bị huỷ', const Color(0xFFFEE2E2), const Color(0xFFB91C1C)),
+      'DA_HUY' => (Icons.info_outline_rounded, phieu.yeuCauHuy == 'DONG_Y' ? 'Đã huỷ theo yêu cầu' : 'Đơn đã bị huỷ', const Color(0xFFFEE2E2), const Color(0xFFB91C1C)),
       _ => (Icons.help_outline_rounded, 'Không xác định', AppColor.slot, AppColor.textMuted),
     };
 
     final venueName = venue?.tenCumSan ?? 'Cụm sân';
-    return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(AppRadius.lg), boxShadow: AppShadow.card),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 400),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        boxShadow: highlight ? [BoxShadow(color: AppColor.primary.withValues(alpha: .45), blurRadius: 18, spreadRadius: 1)] : AppShadow.card,
+        border: highlight ? Border.all(color: AppColor.primary, width: 2) : null,
+      ),
       clipBehavior: Clip.antiAlias,
       child: IntrinsicHeight(
         child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -232,6 +308,7 @@ class _BookingTicket extends StatelessWidget {
                       style: AppText.stat(size: 20, color: cancelled ? AppColor.textMuted : AppColor.primaryDark).copyWith(decoration: cancelled ? TextDecoration.lineThrough : null),
                     ),
                   ]),
+                  ..._notes(),
                   if (_canReview) ...[const SizedBox(height: 12), _reviewStrip()],
                   const SizedBox(height: 12),
                   _actions(context),
@@ -243,6 +320,44 @@ class _BookingTicket extends StatelessWidget {
       ),
     );
   }
+
+  List<Widget> _notes() {
+    final cancelled = phieu.trangThai == 'DA_HUY';
+    return [
+      if (phieu.maSanCu != null && !cancelled)
+        _note(Icons.swap_horiz_rounded, const Color(0xFFEFF6FF), const Color(0xFF1E40AF),
+            'Chủ sân đã đổi sang ${san?.tenSan ?? 'sân mới'} (từ ${oldCourtName ?? 'sân cũ'})${phieu.lyDoDoiSan == null ? '' : ' · ${phieu.lyDoDoiSan}'}. Giờ và giá giữ nguyên.'),
+      if (phieu.cancelPending)
+        _note(Icons.event_busy_rounded, const Color(0xFFFFFBEB), const Color(0xFF92400E),
+            'Bạn đã xin huỷ · ${phieu.lyDoHuy ?? ''}. Lượt đặt vẫn giữ cho đến khi chủ sân xác nhận.',
+            actions: [
+              TextButton.icon(onPressed: onContact, icon: const Icon(Icons.call_outlined, size: 16), label: const Text('Liên hệ chủ sân')),
+              TextButton.icon(onPressed: onWithdraw, icon: const Icon(Icons.undo_rounded, size: 16), label: const Text('Rút yêu cầu')),
+            ]),
+      if (phieu.yeuCauHuy == 'TU_CHOI' && !cancelled)
+        _note(Icons.gpp_maybe_outlined, const Color(0xFFFEF2F2), const Color(0xFF991B1B), 'Chủ sân chưa đồng ý huỷ${phieu.phanHoiHuy == null ? '' : ': ${phieu.phanHoiHuy}'}'),
+      if (cancelled && phieu.yeuCauHuy == 'DONG_Y' && phieu.phanHoiHuy != null)
+        _note(Icons.storefront_outlined, AppColor.slot, const Color(0xFF475569), 'Chủ sân nhắn: ${phieu.phanHoiHuy}'),
+    ];
+  }
+
+  Widget _note(IconData icon, Color bg, Color fg, String text, {List<Widget> actions = const []}) => Container(
+        margin: const EdgeInsets.only(top: 10),
+        padding: EdgeInsets.fromLTRB(10, 9, 10, actions.isEmpty ? 9 : 2),
+        width: double.infinity,
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(AppRadius.md)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(icon, size: 16, color: fg),
+            const SizedBox(width: 8),
+            Expanded(child: Text(text, style: AppText.bodySm(color: fg))),
+          ]),
+          if (actions.isNotEmpty)
+            Wrap(spacing: 0, children: [
+              for (final a in actions) Theme(data: ThemeData(textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: fg, visualDensity: VisualDensity.compact))), child: a),
+            ]),
+        ]),
+      );
 
   Widget _line(IconData icon, String text) => Padding(
         padding: const EdgeInsets.only(top: 2),
@@ -304,10 +419,14 @@ class _BookingTicket extends StatelessWidget {
 
   Widget _actions(BuildContext context) {
     final base = _baseActions(context);
-    final canInvite = (phieu.trangThai == 'CHO_XAC_NHAN' || phieu.trangThai == 'DA_XAC_NHAN') && phieu.batDau.isAfter(DateTime.now());
-    if (!canInvite) return base;
+    final canInvite = (phieu.trangThai == 'CHO_XAC_NHAN' || phieu.trangThai == 'DA_XAC_NHAN') && phieu.batDau.isAfter(DateTime.now()) && !phieu.cancelPending;
+    final cancel = phieu.canRequestCancel
+        ? SzButton.small('Xin huỷ sân', icon: Icons.event_busy_outlined, kind: SzButtonKind.dangerSoft, expand: true, onPressed: onRequestCancel)
+        : null;
+    if (!canInvite) return cancel == null ? base : Column(children: [base, const SizedBox(height: 8), cancel]);
     return Column(children: [
       base,
+      if (cancel != null) ...[const SizedBox(height: 8), cancel],
       const SizedBox(height: 8),
       SzButton.small('Rủ người chơi / mở trận', icon: Icons.groups_rounded, kind: SzButtonKind.outline, expand: true, onPressed: () async {
         final created = await Navigator.push<MatchInfo>(context, MaterialPageRoute(builder: (_) => CreateMatchScreen(bookingId: phieu.maPhieuDat)));
@@ -625,6 +744,51 @@ class _InvoiceSheetState extends State<_InvoiceSheet> {
           Positioned(top: 4, right: 4, child: SzIconButton(Icons.close_rounded, color: Colors.white, onPressed: () => Navigator.pop(ctx))),
         ]),
       ),
+    );
+  }
+}
+
+/// Tải dữ liệu lịch sử đặt sân rồi mở màn hình (dùng khi bấm thông báo).
+class _BookingHistoryLoader extends StatefulWidget {
+  final String? focusId;
+  const _BookingHistoryLoader({this.focusId});
+
+  @override
+  State<_BookingHistoryLoader> createState() => _BookingHistoryLoaderState();
+}
+
+class _BookingHistoryLoaderState extends State<_BookingHistoryLoader> {
+  late Future<BookingHistoryScreen> _future = _load();
+
+  Future<BookingHistoryScreen> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final username = prefs.getString('username') ?? '';
+    final bookings = await PhieuDatSanApi.getPhieuDatSanTheoUser(username);
+    final venues = await CumSanApi.getCumSan(1000) ?? [];
+    final courts = await Future.wait(venues.map((v) => SanApi.getSanTheoCumSan(v.maCumSan).catchError((_) => <SanModel>[])));
+    final images = await HinhAnhSanApi.getAllHinhAnhSan();
+    return BookingHistoryScreen(
+      phieuList: bookings,
+      sanMap: {for (final list in courts) for (final san in list) san.maSan: san},
+      cumSanMap: {for (final v in venues) v.maCumSan: v},
+      images: images,
+      focusId: widget.focusId,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<BookingHistoryScreen>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.hasData) return snap.data!;
+        return Scaffold(
+          appBar: const SzTopBar(title: 'Sân đã đặt', subtitle: 'Lịch sử đặt sân của bạn'),
+          body: snap.hasError
+              ? SzErrorState(message: 'Không tải được lịch sử đặt sân.', onRetry: () => setState(() => _future = _load()))
+              : const SzLoading(message: 'Đang tải…'),
+        );
+      },
     );
   }
 }

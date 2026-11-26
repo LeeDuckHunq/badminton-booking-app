@@ -10,6 +10,7 @@ import 'package:application/ui/screen/account_screen.dart';
 import 'package:application/ui/community/community_screen.dart';
 import 'package:application/ui/screen/booking_schedule_screen.dart';
 import 'package:application/ui/screen/chat_screen.dart';
+import 'package:application/services/notification_center.dart';
 import 'package:application/ui/screen/favorite_list_screen.dart';
 import 'package:application/ui/screen/highlight_screen.dart';
 import 'package:application/ui/screen/search_screen.dart';
@@ -92,6 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadUser();
     _loadData();
+    NotificationCenter.instance.start();
   }
 
   Future<void> _loadUser() async {

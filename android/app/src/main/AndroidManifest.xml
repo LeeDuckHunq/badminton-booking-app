@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Tự cập nhật: cài APK bản mới đã tải về -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Thông báo đặt sân / tin nhắn (Android 13+ phải xin quyền) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Smash Zone"
         android:name="${applicationName}"
