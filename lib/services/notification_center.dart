@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:application/api/api_client.dart';
-import 'package:application/api/chat_api.dart';
+import 'package:application/api/ban_be_api.dart';
+import 'package:application/ui/chat/friends_view.dart';
 import 'package:application/api/cum_san_api.dart';
 import 'package:application/api/server_address.dart';
 import 'package:application/api/thong_bao_api.dart';
@@ -205,11 +206,12 @@ class NotificationCenter extends ChangeNotifier with WidgetsBindingObserver {
       case 'CHAT':
         final prefs = await SharedPreferences.getInstance();
         final me = prefs.getString('username') ?? '';
-        final users = await ChatApi.getAllUsers();
-        final peer = users.where((u) => u.username.toLowerCase() == id.toLowerCase());
-        if (peer.isNotEmpty && me.isNotEmpty) {
-          nav.push(MaterialPageRoute(builder: (_) => ConversationScreen(currentUsername: me, peer: peer.first)));
+        final peer = await BanBeApi.profile(id);
+        if (me.isNotEmpty) {
+          nav.push(MaterialPageRoute(builder: (_) => ConversationScreen(currentUsername: me, peer: (peer ?? Person(username: id, fullName: '')).chatUser)));
         }
+      case 'FRIEND':
+        nav.push(MaterialPageRoute(builder: (_) => const FriendsScreen()));
       case 'REVIEW':
         final venue = await CumSanApi.getCumSanInfo(id);
         if (venue != null) nav.push(MaterialPageRoute(builder: (_) => BookingScheduleScreen(cumSan: venue)));

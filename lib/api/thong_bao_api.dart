@@ -58,6 +58,8 @@ class ThongBao {
         'TRAN_HUY' => (Icons.block_rounded, const Color(0xFFB91C1C), const Color(0xFFFEE2E2), 'Cộng đồng'),
         'TRAN_DA_CHUYEN_TIEN' => (Icons.account_balance_wallet_rounded, const Color(0xFFB45309), const Color(0xFFFEF3C7), 'Cộng đồng'),
         'DANH_GIA_PHAN_HOI' => (Icons.rate_review_rounded, const Color(0xFF1D4ED8), const Color(0xFFDBEAFE), 'Đánh giá'),
+        'KET_BAN_LOI_MOI' => (Icons.person_add_alt_1_rounded, const Color(0xFF15803D), const Color(0xFFDCFCE7), 'Tin nhắn'),
+        'KET_BAN_DONG_Y' => (Icons.how_to_reg_rounded, const Color(0xFF15803D), const Color(0xFFDCFCE7), 'Tin nhắn'),
         _ => (Icons.notifications_rounded, const Color(0xFF64748B), const Color(0xFFF1F5F9), 'Khác'),
       };
 }

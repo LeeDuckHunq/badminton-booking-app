@@ -5,6 +5,7 @@ import 'package:application/model/create_phieu_dat_model.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/model/phieu_dat_san_model.dart';
 import 'package:application/model/san_model.dart';
+import 'package:application/ui/chat/friends_view.dart';
 import 'package:application/ui/invoice/models/invoice_model.dart';
 import 'package:application/ui/screen/invoice_screen.dart';
 import 'package:application/ui/review/review_widgets.dart';
@@ -283,7 +284,7 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
 
   Widget _buildVenueHeader() {
     final c = widget.cumSan;
-    return Container(
+    final header = Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -312,6 +313,24 @@ class _BookingScheduleScreenState extends State<BookingScheduleScreen> {
         SzIconButton(Icons.map_outlined, size: 48, background: AppColor.mint, color: AppColor.primary, tooltip: 'Xem bản đồ', onPressed: _openMap),
       ]),
     );
+    final owner = c.ownerUsername;
+    final phone = c.sDT.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (owner == null && phone.isEmpty) return header;
+    // Liên hệ chủ sân: nhắn trong app (không cần kết bạn) hoặc gọi số của cụm sân.
+    return Column(children: [
+      header,
+      Container(
+        color: Colors.white,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+        child: Row(children: [
+          if (owner != null)
+            Expanded(child: SzButton.small('Nhắn chủ sân', icon: Icons.chat_bubble_outline_rounded, kind: SzButtonKind.soft, expand: true, onPressed: () => openChatWith(context, username: owner))),
+          if (owner != null && phone.isNotEmpty) const SizedBox(width: 8),
+          if (phone.isNotEmpty)
+            Expanded(child: SzButton.small('Gọi sân', icon: Icons.call_outlined, kind: SzButtonKind.outline, expand: true, onPressed: () => launchUrl(Uri.parse('tel:$phone')))),
+        ]),
+      ),
+    ]);
   }
 
   Widget _buildDateStrip() {

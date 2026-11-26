@@ -1,5 +1,7 @@
 // lib/ui/screen/chat_screen.dart
+import 'package:application/api/ban_be_api.dart';
 import 'package:application/api/chat_api.dart';
+import 'package:application/ui/chat/friends_view.dart';
 import 'package:application/ui/chat/models/chat_models.dart';
 import 'package:application/ui/chat/screens/conversation_screen.dart';
 import 'package:application/ui/theme/app_color.dart';
@@ -8,9 +10,9 @@ import 'package:application/ui/widget/sz.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum _Filter { all, owners, chatted }
+enum _Filter { all, owners, people }
 
-/// M11 – Tin nhắn (tab).
+/// M11 – Tin nhắn (tab): Trò chuyện | Bạn bè. Không còn danh bạ toàn bộ người dùng.
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
@@ -19,13 +21,14 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> with AutomaticKeepAliveClientMixin {
-  List<ChatUser> _users = [];
   List<ChatRoom> _rooms = [];
   bool _loading = true;
   bool _failed = false;
   String _me = '';
   String _query = '';
   _Filter _filter = _Filter.all;
+  int _view = 0;
+  int _requests = 0;
   final _searchCtrl = TextEditingController();
 
   @override
@@ -47,6 +50,8 @@ class _ChatScreenState extends State<ChatScreen> with AutomaticKeepAliveClientMi
     final prefs = await SharedPreferences.getInstance();
     _me = prefs.getString('username') ?? '';
     await _load();
+    final friends = await BanBeApi.overview();
+    if (mounted && friends != null) setState(() => _requests = friends.incoming.length);
   }
 
   Future<void> _load() async {
@@ -54,15 +59,11 @@ class _ChatScreenState extends State<ChatScreen> with AutomaticKeepAliveClientMi
       _loading = true;
       _failed = false;
     });
-    final results = await Future.wait([ChatApi.getAllUsers(), ChatApi.getMyRooms()]);
+    final rooms = await ChatApi.getMyRooms();
     if (!mounted) return;
-    final users = (results[0] as List<ChatUser>).where((u) => u.username.toLowerCase() != _me.toLowerCase()).toList()
-      ..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
-    final rooms = results[1] as List<ChatRoom>?;
     setState(() {
-      _users = users;
       _rooms = rooms ?? [];
-      _failed = rooms == null && users.isEmpty;
+      _failed = rooms == null;
       _loading = false;
     });
   }
@@ -81,74 +82,120 @@ class _ChatScreenState extends State<ChatScreen> with AutomaticKeepAliveClientMi
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final chattedNames = _rooms.map((r) => r.peer.username.toLowerCase()).toSet();
-    final rooms = _rooms.where((r) => _matches(r.peer) && (_filter != _Filter.owners || r.peer.isOwner)).toList();
-    final contacts = _filter == _Filter.chatted
-        ? <ChatUser>[]
-        : _users.where((u) => _matches(u) && !chattedNames.contains(u.username.toLowerCase()) && (_filter != _Filter.owners || u.isOwner)).toList();
-    final ownersCount = _users.where((u) => u.isOwner).length;
-
     return Scaffold(
       body: Column(children: [
         const SzBrandHeader(subtitle: 'Tin nhắn'),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _load,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              children: [
-                Row(children: [
-                  Text('Hộp thư', style: AppText.display(color: AppColor.primaryDark).copyWith(fontSize: 28)),
-                  const SizedBox(width: 10),
-                  if (!_loading) SzPill('${_rooms.length} hội thoại', bold: false),
-                  const Spacer(),
-                  SzIconButton(Icons.refresh_rounded, background: Colors.white, color: AppColor.primary, tooltip: 'Làm mới', onPressed: _load),
-                ]),
-                const SizedBox(height: 14),
-                SzTextField(
-                  controller: _searchCtrl,
-                  hint: 'Tìm người dùng, chủ sân…',
-                  icon: Icons.search_rounded,
-                  onChanged: (v) => setState(() => _query = v),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 42,
-                  child: ListView(scrollDirection: Axis.horizontal, children: [
-                    SzChip('Tất cả', count: _users.length, selected: _filter == _Filter.all, onTap: () => setState(() => _filter = _Filter.all)),
-                    const SizedBox(width: 8),
-                    SzChip('Chủ sân', count: ownersCount, selected: _filter == _Filter.owners, onTap: () => setState(() => _filter = _Filter.owners)),
-                    const SizedBox(width: 8),
-                    SzChip('Đã nhắn', count: _rooms.length, selected: _filter == _Filter.chatted, onTap: () => setState(() => _filter = _Filter.chatted)),
-                  ]),
-                ),
-                const SizedBox(height: 16),
-                if (_loading)
-                  for (var i = 0; i < 4; i++) const Padding(padding: EdgeInsets.only(bottom: 10), child: SzSkeleton(height: 76, radius: AppRadius.lg))
-                else if (_failed)
-                  SzErrorState(message: 'Không tải được danh sách tin nhắn.', onRetry: _load)
-                else if (rooms.isEmpty && contacts.isEmpty)
-                  const SzEmptyState(icon: Icons.forum_outlined, title: 'Không có ai phù hợp', message: 'Thử tìm bằng tên hoặc tên đăng nhập khác.')
-                else ...[
-                  if (rooms.isNotEmpty) ...[
-                    _sectionLabel('Cuộc trò chuyện'),
-                    for (final r in rooms) _RoomTile(room: r, onTap: () => _open(r.peer)),
-                  ],
-                  if (contacts.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    _sectionLabel(rooms.isEmpty ? 'Danh bạ' : 'Bắt đầu trò chuyện mới'),
-                    for (final u in contacts) _ContactTile(user: u, onTap: () => _open(u)),
-                  ],
-                ],
-              ],
-            ),
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+          child: _Tabs(
+            index: _view,
+            requests: _requests,
+            onChanged: (i) => setState(() => _view = i),
           ),
+        ),
+        Expanded(
+          child: IndexedStack(index: _view, children: [
+            _conversations(),
+            FriendsView(onRequestCount: (n) => setState(() => _requests = n)),
+          ]),
         ),
       ]),
     );
   }
 
-  Widget _sectionLabel(String text) => Padding(padding: const EdgeInsets.only(bottom: 8, left: 4), child: Text(text.toUpperCase(), style: AppText.labelSm()));
+  Widget _conversations() {
+    final rooms = _rooms.where((r) => _matches(r.peer) && switch (_filter) {
+          _Filter.owners => r.peer.isOwner,
+          _Filter.people => !r.peer.isOwner && !r.peer.isAdmin,
+          _ => true,
+        }).toList();
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+        children: [
+          Row(children: [
+            Text('Hộp thư', style: AppText.display(color: AppColor.primaryDark).copyWith(fontSize: 26)),
+            const SizedBox(width: 10),
+            if (!_loading) SzPill('${_rooms.length} hội thoại', bold: false),
+            const Spacer(),
+            SzIconButton(Icons.refresh_rounded, background: Colors.white, color: AppColor.primary, tooltip: 'Làm mới', onPressed: _load),
+          ]),
+          const SizedBox(height: 12),
+          SzTextField(controller: _searchCtrl, hint: 'Tìm trong cuộc trò chuyện…', icon: Icons.search_rounded, onChanged: (v) => setState(() => _query = v)),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 42,
+            child: ListView(scrollDirection: Axis.horizontal, children: [
+              SzChip('Tất cả', count: _rooms.length, selected: _filter == _Filter.all, onTap: () => setState(() => _filter = _Filter.all)),
+              const SizedBox(width: 8),
+              SzChip('Chủ sân', count: _rooms.where((r) => r.peer.isOwner).length, selected: _filter == _Filter.owners, onTap: () => setState(() => _filter = _Filter.owners)),
+              const SizedBox(width: 8),
+              SzChip('Bạn bè & cộng đồng', selected: _filter == _Filter.people, onTap: () => setState(() => _filter = _Filter.people)),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          if (_loading)
+            for (var i = 0; i < 4; i++) const Padding(padding: EdgeInsets.only(bottom: 10), child: SzSkeleton(height: 76, radius: AppRadius.lg))
+          else if (_failed)
+            SzErrorState(message: 'Không tải được danh sách tin nhắn.', onRetry: _load)
+          else if (rooms.isEmpty)
+            Column(children: [
+              SzEmptyState(
+                icon: Icons.forum_outlined,
+                title: _query.isEmpty ? 'Chưa có tin nhắn' : 'Không tìm thấy cuộc trò chuyện',
+                message: 'Nhắn chủ sân bằng nút "Nhắn chủ sân" ở trang đặt sân, hoặc kết bạn để nhắn với người chơi khác.',
+              ),
+              SzButton.small('Tìm bạn bè', icon: Icons.person_search_rounded, kind: SzButtonKind.soft, onPressed: () => setState(() => _view = 1)),
+            ])
+          else
+            for (final r in rooms) _RoomTile(room: r, onTap: () => _open(r.peer)),
+        ],
+      ),
+    );
+  }
+}
+
+class _Tabs extends StatelessWidget {
+  final int index;
+  final int requests;
+  final ValueChanged<int> onChanged;
+  const _Tabs({required this.index, required this.requests, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tab(int i, String label, {int badge = 0}) => Expanded(
+          child: GestureDetector(
+            onTap: () => onChanged(i),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              height: 40,
+              decoration: BoxDecoration(
+                color: index == i ? Colors.white : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: index == i ? AppShadow.card : null,
+              ),
+              alignment: Alignment.center,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(label, style: AppText.labelLg(color: index == i ? AppColor.primaryDark : AppColor.textMuted)),
+                if (badge > 0)
+                  Container(
+                    margin: const EdgeInsets.only(left: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(color: AppColor.danger, borderRadius: BorderRadius.circular(9)),
+                    child: Text('$badge', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+                  ),
+              ]),
+            ),
+          ),
+        );
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: AppColor.canvas, borderRadius: BorderRadius.circular(13)),
+      child: Row(children: [tab(0, 'Trò chuyện'), tab(1, 'Bạn bè', badge: requests)]),
+    );
+  }
 }
 
 String _relativeTime(DateTime? t) {
@@ -208,37 +255,6 @@ class _RoomTile extends StatelessWidget {
               ),
             ]),
           ),
-        ]),
-      ),
-    );
-  }
-}
-
-class _ContactTile extends StatelessWidget {
-  final ChatUser user;
-  final VoidCallback onTap;
-  const _ContactTile({required this.user, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: SzCard(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        onTap: onTap,
-        child: Row(children: [
-          SzAvatar.soft(user.displayName, size: 44),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Flexible(child: Text(user.displayName, style: AppText.labelLg(), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                _RoleTag(user),
-              ]),
-              Text('@${user.username}', style: AppText.bodySm()),
-            ]),
-          ),
-          const Icon(Icons.chat_bubble_outline_rounded, size: 20, color: AppColor.primary),
         ]),
       ),
     );

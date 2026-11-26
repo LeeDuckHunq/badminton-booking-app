@@ -6,7 +6,7 @@
 //   ?preview=home&tab=3            ?preview=schedule&venue=CS_123
 //   ?preview=invoice&booking=PD_x  ?preview=chat&peer=hoanganh
 //   ?preview=match&id=TR_x         ?preview=group&id=NH_x  ?preview=create-match
-import 'package:application/api/chat_api.dart';
+import 'package:application/api/ban_be_api.dart';
 import 'package:application/api/cum_san_api.dart';
 import 'package:application/api/hinh_anh_san_api.dart';
 import 'package:application/api/phieu_dat_san_api.dart';
@@ -17,6 +17,7 @@ import 'package:application/ui/chat/screens/conversation_screen.dart';
 import 'package:application/services/app_updater.dart';
 import 'package:application/ui/update/update_screen.dart';
 import 'package:application/ui/notify/notifications_screen.dart';
+import 'package:application/ui/chat/friends_view.dart';
 import 'package:application/ui/community/create_match_screen.dart';
 import 'package:application/ui/community/group_detail_screen.dart';
 import 'package:application/ui/community/match_detail_screen.dart';
@@ -62,6 +63,7 @@ Widget? previewHome() {
     'group' => GroupDetailScreen(groupId: q['id']!),
     'create-match' => CreateMatchScreen(groupId: q['group']),
     'notifications' => const NotificationsScreen(),
+    'friends' => const FriendsScreen(),
     'history-focus' => BookingHistoryScreen.loader(focusId: q['booking']),
     'home' => HomeScreen(initialTab: HomeNavTab.values[int.tryParse(q['tab'] ?? '0') ?? 0]),
     _ => _AsyncPreview(name: name, params: q),
@@ -110,9 +112,8 @@ class _AsyncPreview extends StatelessWidget {
         );
       case 'chat':
         final prefs = await SharedPreferences.getInstance();
-        final users = await ChatApi.getAllUsers();
-        final peer = users.firstWhere((u) => u.username == params['peer']);
-        return ConversationScreen(currentUsername: prefs.getString('username')!, peer: peer);
+        final peer = await BanBeApi.profile(params['peer']!);
+        return ConversationScreen(currentUsername: prefs.getString('username')!, peer: peer!.chatUser);
       default:
         return Scaffold(body: Center(child: Text('Không có màn xem trước "$name"')));
     }

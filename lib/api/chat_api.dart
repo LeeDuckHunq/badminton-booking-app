@@ -35,6 +35,20 @@ class ChatApi {
 
   /// Lấy hoặc tạo phòng chat giữa 2 user — trả về maPhongChat.
   /// Một trong hai username phải là tài khoản đang đăng nhập.
+  /// Như getOrCreateRoom nhưng cho biết có bị chặn vì chưa kết bạn (403) hay không.
+  static Future<({String? room, bool forbidden})> openRoom(String me, String other) async {
+    try {
+      final res = await ApiClient.post('/chat/get-or-create-room', {'username1': me, 'username2': other});
+      if (res.statusCode == 403) return (room: null, forbidden: true);
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        final body = res.body.trim();
+        if (body.startsWith('"')) return (room: jsonDecode(body) as String, forbidden: false);
+        return (room: body, forbidden: false);
+      }
+    } catch (_) {}
+    return (room: null, forbidden: false);
+  }
+
   static Future<String?> getOrCreateRoom({
     required String username1,
     required String username2,

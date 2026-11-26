@@ -1,13 +1,11 @@
-import 'package:application/api/chat_api.dart';
 import 'package:application/api/phieu_dat_san_api.dart';
 import 'package:application/model/cum_san_model.dart';
 import 'package:application/model/phieu_dat_san_model.dart';
-import 'package:application/ui/chat/screens/conversation_screen.dart';
+import 'package:application/ui/chat/friends_view.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:application/ui/theme/app_theme.dart';
 import 'package:application/ui/widget/sz.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Liên hệ chủ sân: tài khoản (nhắn trong app) + số điện thoại cụm sân (Zalo / gọi).
@@ -70,18 +68,7 @@ class OwnerContactButtons extends StatelessWidget {
   final OwnerContact contact;
   const OwnerContactButtons({super.key, required this.contact});
 
-  Future<void> _chat(BuildContext context) async {
-    final prefs = await SharedPreferences.getInstance();
-    final me = prefs.getString('username') ?? '';
-    final users = await ChatApi.getAllUsers();
-    final peer = users.where((u) => u.username.toLowerCase() == contact.username!.toLowerCase());
-    if (!context.mounted) return;
-    if (peer.isEmpty || me.isEmpty) {
-      showSzSnack(context, 'Không mở được cuộc trò chuyện', type: SzToast.error);
-      return;
-    }
-    Navigator.push(context, MaterialPageRoute(builder: (_) => ConversationScreen(currentUsername: me, peer: peer.first)));
-  }
+  Future<void> _chat(BuildContext context) => openChatWith(context, username: contact.username!);
 
   @override
   Widget build(BuildContext context) {

@@ -1,7 +1,9 @@
 // lib/ui/chat/screens/conversation_screen.dart
 import 'dart:async';
 
+import 'package:application/api/ban_be_api.dart';
 import 'package:application/api/chat_api.dart';
+import 'package:application/ui/chat/friends_view.dart';
 import 'package:application/ui/chat/models/chat_models.dart';
 import 'package:application/ui/theme/app_color.dart';
 import 'package:application/ui/theme/app_theme.dart';
@@ -28,6 +30,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   bool _loadingRoom = true;
   bool _sending = false;
   Timer? _pollTimer;
+  Person? _locked;
 
   @override
   void initState() {
@@ -45,10 +48,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   Future<void> _initRoom() async {
     setState(() => _loadingRoom = true);
-    final roomId = await ChatApi.getOrCreateRoom(username1: widget.currentUsername, username2: widget.peer.username);
+    final opened = await ChatApi.openRoom(widget.currentUsername, widget.peer.username);
+    final roomId = opened.room;
+    Person? locked;
+    if (opened.forbidden) {
+      locked = await BanBeApi.profile(widget.peer.username) ?? Person(username: widget.peer.username, fullName: widget.peer.fullName, role: widget.peer.role);
+    }
     if (!mounted) return;
     setState(() {
       _roomId = roomId;
+      _locked = locked;
       _loadingRoom = false;
     });
     if (roomId != null) {
@@ -132,12 +141,38 @@ class _ConversationScreenState extends State<ConversationScreen> {
       ),
       body: _loadingRoom
           ? const SzLoading(message: 'Đang mở cuộc trò chuyện…')
-          : _roomId == null
+          : _locked != null
+              ? _lockedView()
+              : _roomId == null
               ? SzErrorState(message: 'Không thể tạo phòng chat.', onRetry: _initRoom)
               : Column(children: [
                   Expanded(child: _buildMessages()),
                   _buildInput(),
                 ]),
+    );
+  }
+
+  /// Chưa là bạn bè: mời kết bạn thay vì cho nhắn.
+  Widget _lockedView() {
+    final p = _locked!;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 72, height: 72, decoration: BoxDecoration(color: AppColor.mint, borderRadius: BorderRadius.circular(24)), child: const Icon(Icons.person_add_alt_1_rounded, size: 34, color: AppColor.primaryDark)),
+          const SizedBox(height: 16),
+          Text('Kết bạn để nhắn tin', style: AppText.headlineMd()),
+          const SizedBox(height: 8),
+          Text('Để tránh tin nhắn làm phiền, bạn chỉ nhắn được với bạn bè, chủ sân, và người cùng nhóm hoặc cùng trận.',
+              textAlign: TextAlign.center, style: AppText.body(color: AppColor.textMuted)),
+          const SizedBox(height: 18),
+          FriendActionButton(person: p, compact: false, onChanged: (q) => setState(() => _locked = p.withRelation(q))),
+          if (p.quanHe == 'DA_GUI') ...[
+            const SizedBox(height: 10),
+            Text('Khi ${p.displayName} đồng ý, hai bạn có thể nhắn tin cho nhau.', textAlign: TextAlign.center, style: AppText.bodySm()),
+          ],
+        ]),
+      ),
     );
   }
 
